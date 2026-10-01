@@ -140,32 +140,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
 
 [[package]]
-name = "cambio-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cambio-core",
- "libc",
- "serde_json",
-]
-
-[[package]]
-name = "cambio-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "flate2",
- "image",
- "libc",
- "lopdf",
- "oxipng",
- "resvg",
- "tar",
- "webp",
- "zip",
-]
-
-[[package]]
 name = "cbc"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -841,6 +815,32 @@ dependencies = [
  "log",
  "rgb",
  "rustc-hash",
+]
+
+[[package]]
+name = "pavo-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "libc",
+ "pavo-core",
+ "serde_json",
+]
+
+[[package]]
+name = "pavo-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "flate2",
+ "image",
+ "libc",
+ "lopdf",
+ "oxipng",
+ "resvg",
+ "tar",
+ "webp",
+ "zip",
 ]
 
 [[package]]

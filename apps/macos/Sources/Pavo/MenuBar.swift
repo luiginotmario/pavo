@@ -1,7 +1,7 @@
 import AppKit
 import os
 
-private let log = Logger(subsystem: "com.giginotmario.cambio", category: "conversion")
+private let log = Logger(subsystem: "com.giginotmario.pavo", category: "conversion")
 
 /// The whole app: a peacock in the menu bar. Drop files on it (or click it and choose some),
 /// pick what to turn them into, and the results land next to the originals.
@@ -92,7 +92,7 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         }
 
         menu.addItem(.separator())
-        menu.addItem(entry("quit cambio", #selector(quit), key: "q"))
+        menu.addItem(entry("quit pavo", #selector(quit), key: "q"))
         show(menu)
     }
 

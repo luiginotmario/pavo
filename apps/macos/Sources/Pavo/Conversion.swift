@@ -1,7 +1,7 @@
 import Foundation
 
-/// One `cambio run` in flight. Closing its stdin cancels it, and if the app goes away the pipe
-/// closes on its own, so a conversion can never outlive cambio.
+/// One `pavo run` in flight. Closing its stdin cancels it, and if the app goes away the pipe
+/// closes on its own, so a conversion can never outlive pavo.
 final class Conversion {
     enum Failure: Error, Equatable {
         case cancelled

@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Cambio</string>
+    <string>Pavo</string>
     <key>CFBundleDisplayName</key>
-    <string>Cambio</string>
+    <string>Pavo</string>
     <key>CFBundleIdentifier</key>
-    <string>com.giginotmario.cambio</string>
+    <string>com.giginotmario.pavo</string>
     <key>CFBundleExecutable</key>
-    <string>Cambio</string>
+    <string>Pavo</string>
     <key>CFBundleIconFile</key>
-    <string>Cambio</string>
+    <string>Pavo</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

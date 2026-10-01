@@ -1,6 +1,6 @@
 ---
 name: format request
-about: a format or conversion cambio should support
+about: a format or conversion pavo should support
 labels: enhancement
 ---
 

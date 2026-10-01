@@ -17,10 +17,10 @@ use crate::{cancel, Event};
 const GIF_FILTER: &str = "fps=12,scale='min(640,iw)':-1:flags=lanczos,split[a][b];\
                           [a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4";
 
-/// Bundled next to the cambio binary in releases; otherwise wherever it's installed.
+/// Bundled next to the pavo binary in releases; otherwise wherever it's installed.
 /// GUI apps don't inherit the shell's PATH, so the usual homebrew spots are checked by hand.
 pub fn binary() -> Result<PathBuf> {
-    if let Some(p) = env::var_os("CAMBIO_FFMPEG") {
+    if let Some(p) = env::var_os("PAVO_FFMPEG") {
         return Ok(p.into());
     }
     let beside_us = env::current_exe().ok().and_then(|exe| exe.parent().map(|d| d.join("ffmpeg")));

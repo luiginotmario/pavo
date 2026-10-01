@@ -1,10 +1,10 @@
 import AppKit
 
-/// No window, no dock icon: cambio is a peacock in the menu bar and nothing else.
+/// No window, no dock icon: pavo is a peacock in the menu bar and nothing else.
 @main
-final class CambioApp: NSObject, NSApplicationDelegate {
+final class PavoApp: NSObject, NSApplicationDelegate {
     /// NSApplication only holds its delegate weakly, so the app keeps the strong reference.
-    private static let shared = CambioApp()
+    private static let shared = PavoApp()
 
     private var menuBar: MenuBar?
 

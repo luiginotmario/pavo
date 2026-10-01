@@ -1,4 +1,4 @@
-# hi, this is cambio
+# hi, this is pavo
 
 a tiny, open-source menu bar app that converts files. drop a file on the peacock in your menu bar, pick a format, and the new file shows up right next to the old one.
 
@@ -29,15 +29,15 @@ video goes through [ffmpeg](https://ffmpeg.org) using your mac's hardware encode
 - clone the repo
 - install [rust](https://rustup.rs) and ffmpeg (`brew install ffmpeg`)
 - run `./scripts/build.sh`
-- open `build/Cambio.app` — done, you're up and running.
+- open `build/Pavo.app` — done, you're up and running.
 
 make changes on a pr and i'll build a new version :)
 
 ## how it's built
 
 ```
-crates/cambio-core   rust    every conversion lives here
-crates/cambio-cli    rust    `cambio` on the command line — the app runs this same binary
+crates/pavo-core   rust    every conversion lives here
+crates/pavo-cli    rust    `pavo` on the command line — the app runs this same binary
 apps/macos           swift   the menu bar app. no dependencies.
 ```
 
@@ -47,8 +47,8 @@ you can use the engine without the app too:
 
 ```
 cargo build --release
-./target/release/cambio actions clip.mov
-./target/release/cambio run to:mp4 clip.mov
+./target/release/pavo actions clip.mov
+./target/release/pavo run to:mp4 clip.mov
 ```
 
 ## license

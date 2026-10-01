@@ -1,5 +1,5 @@
 [package]
-name = "cambio-core"
+name = "pavo-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import Cambio
+@testable import Pavo
 
 /// The app and the rust cli talk over one json object per line. These pin down that contract.
 struct CLIOutputTests {
@@ -38,7 +38,7 @@ struct CLIOutputTests {
 
 nonisolated private let builtCLI = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()
-    .appending(path: "../../../../target/release/cambio")
+    .appending(path: "../../../../target/release/pavo")
     .standardized
 
 /// Runs the real rust cli through `Conversion`, the same way the menu bar does.
@@ -46,7 +46,7 @@ nonisolated private let builtCLI = URL(fileURLWithPath: #filePath)
 @Suite(.enabled(if: FileManager.default.isExecutableFile(atPath: builtCLI.path)))
 struct EndToEndTests {
 
-    let folder = FileManager.default.temporaryDirectory.appending(path: "cambio-swift-\(UUID().uuidString)")
+    let folder = FileManager.default.temporaryDirectory.appending(path: "pavo-swift-\(UUID().uuidString)")
     let png: URL
 
     init() throws {

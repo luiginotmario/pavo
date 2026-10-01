@@ -1,4 +1,4 @@
-//! `cambio` on the command line. The menu bar app drives this same binary
+//! `pavo` on the command line. The menu bar app drives this same binary
 //! with `--json`, so anything the app can do, a script can too.
 
 use std::io::Read;
@@ -7,14 +7,14 @@ use std::process::ExitCode;
 use std::thread;
 
 use anyhow::{anyhow, ensure, Result};
-use cambio_core::{actions_for, Event};
+use pavo_core::{actions_for, Event};
 use serde_json::json;
 
-const HELP: &str = "cambio — convert files, locally.
+const HELP: &str = "pavo — convert files, locally.
 
 usage:
-  cambio actions <files...>          what you can do with these files
-  cambio run <action> <files...>     do it, e.g. `cambio run to:mp4 clip.mov`
+  pavo actions <files...>          what you can do with these files
+  pavo run <action> <files...>     do it, e.g. `pavo run to:mp4 clip.mov`
 
 flags:
   --json          one json object per line, for scripts and the menu bar app
@@ -34,12 +34,12 @@ fn main() -> ExitCode {
             Ok(())
         }
         Some("-V" | "--version") => {
-            println!("cambio {}", env!("CARGO_PKG_VERSION"));
+            println!("pavo {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Some("actions") => actions(&args[1..], json),
         Some("run") => run(&args[1..], json, watch_stdin),
-        Some(other) => Err(anyhow!("unknown command `{other}`, try `cambio --help`")),
+        Some(other) => Err(anyhow!("unknown command `{other}`, try `pavo --help`")),
     };
 
     match result {
@@ -48,7 +48,7 @@ fn main() -> ExitCode {
             if json {
                 emit(json!({ "event": "error", "message": format!("{e:#}") }));
             } else {
-                eprintln!("cambio: {e:#}");
+                eprintln!("pavo: {e:#}");
             }
             ExitCode::FAILURE
         }
@@ -95,7 +95,7 @@ fn actions(args: &[String], json: bool) -> Result<()> {
 }
 
 fn run(args: &[String], json: bool, watch_stdin: bool) -> Result<()> {
-    ensure!(args.len() >= 2, "usage: cambio run <action> <files...>");
+    ensure!(args.len() >= 2, "usage: pavo run <action> <files...>");
     let action = &args[0];
     let files = files(&args[1..])?;
 
@@ -111,12 +111,12 @@ fn run(args: &[String], json: bool, watch_stdin: bool) -> Result<()> {
             let mut stdin = std::io::stdin();
             let mut buf = [0u8; 64];
             while matches!(stdin.read(&mut buf), Ok(n) if n > 0) {}
-            cambio_core::cancel();
+            pavo_core::cancel();
         });
     }
 
     let (mut index, mut total, mut last) = (0, files.len(), -1);
-    let outputs = cambio_core::run(action, &files, &mut |event| match event {
+    let outputs = pavo_core::run(action, &files, &mut |event| match event {
         Event::Start { input, index: i, total: t } => {
             (index, total) = (i, t);
             if !json {

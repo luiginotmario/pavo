@@ -70,7 +70,7 @@ pub struct Staged {
 impl Staged {
     pub fn new(dest: PathBuf) -> Self {
         // keep the extension at the end: ffmpeg picks the container from it
-        let tmp = dest.with_file_name(format!(".cambio-{}", name(&dest)));
+        let tmp = dest.with_file_name(format!(".pavo-{}", name(&dest)));
         Self { tmp, dest, done: false }
     }
 
@@ -106,7 +106,7 @@ impl Scratch {
         use std::sync::atomic::{AtomicU32, Ordering};
         static N: AtomicU32 = AtomicU32::new(0);
         let n = N.fetch_add(1, Ordering::Relaxed);
-        Self(std::env::temp_dir().join(format!("cambio-{}-{n}.{ext}", std::process::id())))
+        Self(std::env::temp_dir().join(format!("pavo-{}-{n}.{ext}", std::process::id())))
     }
 }
 

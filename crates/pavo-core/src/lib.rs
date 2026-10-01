@@ -1,4 +1,4 @@
-//! cambio-core: everything cambio can do to a file, in one place.
+//! pavo-core: everything pavo can do to a file, in one place.
 //!
 //! Ask [`actions_for`] what makes sense for some files, then hand one of those
 //! action ids to [`run`]. Every result is written next to the original, and

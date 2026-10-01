@@ -21,7 +21,7 @@ enum PeacockIcon {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "cambio"
+        image.accessibilityDescription = "pavo"
         return image
     }
 }

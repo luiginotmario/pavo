@@ -8,10 +8,10 @@ let settings: [SwiftSetting] = [
 ]
 
 let package = Package(
-    name: "Cambio",
+    name: "Pavo",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "Cambio", path: "Sources/Cambio", swiftSettings: settings),
-        .testTarget(name: "CambioTests", dependencies: ["Cambio"], path: "Tests/CambioTests", swiftSettings: settings),
+        .executableTarget(name: "Pavo", path: "Sources/Pavo", swiftSettings: settings),
+        .testTarget(name: "PavoTests", dependencies: ["Pavo"], path: "Tests/PavoTests", swiftSettings: settings),
     ]
 )

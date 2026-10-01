@@ -1,7 +1,7 @@
 import Foundation
 
-/// The `cambio` command-line tool bundled inside the app. The rust engine only runs while a
-/// conversion does; the rest of the time cambio is just the menu bar app.
+/// The `pavo` command-line tool bundled inside the app. The rust engine only runs while a
+/// conversion does; the rest of the time pavo is just the menu bar app.
 struct Engine {
     struct Action: Decodable {
         let id: String
@@ -11,10 +11,10 @@ struct Engine {
         var isConversion: Bool { group == "convert" }
     }
 
-    private let cli = if let path = ProcessInfo.processInfo.environment["CAMBIO_CLI"] {
+    private let cli = if let path = ProcessInfo.processInfo.environment["PAVO_CLI"] {
         URL(fileURLWithPath: path)
     } else {
-        Bundle.main.bundleURL.appending(path: "Contents/Helpers/cambio")
+        Bundle.main.bundleURL.appending(path: "Contents/Helpers/pavo")
     }
 
     /// What the menu should offer for these files.
