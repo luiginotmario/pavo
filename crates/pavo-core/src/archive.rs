@@ -2,7 +2,9 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter};
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use std::process::{Command, Stdio};
+
+use anyhow::{bail, ensure, Result};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use zip::write::SimpleFileOptions;
 
@@ -69,14 +71,45 @@ pub fn tar_gz(inputs: &[PathBuf]) -> Result<PathBuf> {
     staged.commit()
 }
 
+/// `notes.txt` → `notes.txt.gz`.
+pub fn gzip(input: &Path) -> Result<PathBuf> {
+    let dir = input.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let staged = Staged::new(paths::unique(dir, &paths::name(input), Some("gz")));
+    let mut gz = GzEncoder::new(BufWriter::new(File::create(staged.path())?), Compression::best());
+    io::copy(&mut File::open(input)?, &mut gz)?;
+    gz.finish()?;
+    staged.commit()
+}
+
 /// Unpacks into a new folder named after the archive. Entries that try to escape it are refused.
+/// A lone `.gz` just becomes the file it was wrapping.
 pub fn unpack(input: &Path) -> Result<PathBuf> {
+    let ext = paths::ext(input);
+    if ext == "gz" {
+        let dir = input.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+        let staged = Staged::new(paths::unique(dir, &paths::base(input), None));
+        io::copy(&mut GzDecoder::new(File::open(input)?), &mut File::create(staged.path())?)?;
+        return staged.commit();
+    }
+
     let staged = Staged::new(paths::folder_for(input, &paths::base(input)));
     fs::create_dir(staged.path())?;
-    match paths::ext(input).as_str() {
+    match ext.as_str() {
         "zip" => zip::ZipArchive::new(File::open(input)?)?.extract(staged.path())?,
         "tar" => tar::Archive::new(File::open(input)?).unpack(staged.path())?,
         "tar.gz" | "tgz" => tar::Archive::new(GzDecoder::new(File::open(input)?)).unpack(staged.path())?,
+        // rar, 7z, xz, bz2: libarchive's bsdtar ships with macOS and refuses unsafe paths by default
+        "rar" | "7z" | "xz" | "bz2" | "tar.xz" | "tar.bz2" if cfg!(target_os = "macos") => {
+            let status = Command::new("/usr/bin/bsdtar")
+                .arg("-xf")
+                .arg(input)
+                .arg("-C")
+                .arg(staged.path())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()?;
+            ensure!(status.success(), "couldn't unpack {}", paths::name(input));
+        }
         other => bail!("can't unpack .{other} yet"),
     }
     staged.commit()

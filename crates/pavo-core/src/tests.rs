@@ -147,3 +147,58 @@ fn reads_ffmpeg_output() {
     assert_eq!(probe.audio.as_deref(), Some("aac"));
     assert_eq!((probe.width, probe.height), (1920, 1080));
 }
+
+#[test]
+fn reads_times() {
+    assert_eq!(parse_time("90"), Some(90.0));
+    assert_eq!(parse_time("1:30"), Some(90.0));
+    assert_eq!(parse_time("0:01:30.5"), Some(90.5));
+    assert_eq!(parse_time("soon"), None);
+}
+
+#[test]
+fn offers_every_conversion_and_tool() {
+    let video = ids(&["clip.mov".into()]);
+    for id in ["to:wmv", "to:gif", "trim", "split", "crop:square", "mute", "compress", "audio"] {
+        assert!(video.contains(&id.to_string()), "video should offer {id}");
+    }
+    let pdf = ids(&["doc.pdf".into()]);
+    for id in ["to:png", "to:jpg", "to:txt", "to:docx", "compress", "pdf:split"] {
+        assert!(pdf.contains(&id.to_string()), "pdf should offer {id}");
+    }
+    assert!(ids(&["a.mp3".into(), "b.mp3".into()]).contains(&"join".to_string()));
+    assert!(ids(&["photo.png".into()]).contains(&"to:avif".to_string()));
+    assert_eq!(ids(&["backup.rar".into()]), vec!["unpack".to_string()]);
+}
+
+#[test]
+fn crops_images_from_the_middle() {
+    let dir = TempDir::new("crop");
+    let png = photo(&dir.0, "wide.png"); // 64x48
+    let square = run("crop:square", &[png.clone()], &mut quiet()).unwrap().remove(0);
+    let img = image::open(&square).unwrap();
+    assert_eq!((img.width(), img.height()), (48, 48));
+    let tall = image::open(run("crop:9x16", &[png], &mut quiet()).unwrap().remove(0)).unwrap();
+    assert_eq!((tall.width(), tall.height()), (27, 48));
+}
+
+#[test]
+fn converts_subtitles_both_ways() {
+    let srt = "1\n00:00:01,000 --> 00:00:02,500\nhi\n\n2\n00:00:03,000 --> 00:00:04,000\nbye\n";
+    let vtt = docs::srt_to_vtt(srt);
+    assert!(vtt.starts_with("WEBVTT"));
+    assert!(vtt.contains("00:00:01.000 --> 00:00:02.500"));
+    assert_eq!(docs::vtt_to_srt(&vtt).trim(), srt.trim());
+    assert_eq!(docs::subtitle_text(srt), "hi\nbye\n");
+}
+
+#[test]
+fn gzips_and_unpacks() {
+    let dir = TempDir::new("gz");
+    let note = dir.0.join("note.txt");
+    fs::write(&note, "hello").unwrap();
+    let gz = run("gz", &[note.clone()], &mut quiet()).unwrap().remove(0);
+    assert_eq!(gz.file_name().unwrap(), "note.txt.gz");
+    let back = run("unpack", &[gz], &mut quiet()).unwrap().remove(0);
+    assert_eq!(fs::read_to_string(back).unwrap(), "hello");
+}

@@ -1,13 +1,16 @@
-//! Merge, split and rotate — page shuffling, never re-rendering, so nothing loses quality.
+//! Merge, split and rotate shuffle pages without re-rendering, so nothing loses quality.
+//! Pdf → images draws pages with macOS's own pdf engine; compress re-encodes the photos inside.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, ensure, Context, Result};
-use lopdf::{Document, Object, ObjectId};
+use image::{DynamicImage, ImageFormat};
+use lopdf::{Document, Object, ObjectId, Stream};
 
 use crate::paths::{self, Staged};
+use crate::{docs, images};
 use crate::{cancel, Event};
 
 fn open(path: &Path) -> Result<Document> {
@@ -141,5 +144,169 @@ fn flatten_inherited(doc: &mut Document) {
                 page.set(key, value);
             }
         }
+    }
+}
+
+/// Every page as a picture at print quality (300 dpi). One page → one file; more → a folder.
+/// Outputs are named after `name_from`, which is the pdf itself unless it was made on the fly.
+pub fn to_images(pdf_path: &Path, name_from: &Path, ext: &str, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let input = name_from;
+        let pdf = crate::render::Pdf::open(pdf_path)?;
+        let count = pdf.pages();
+        ensure!(count > 0, "{} has no pages", paths::name(input));
+        let save = |page: usize, path: &Path| -> Result<()> {
+            let img = DynamicImage::ImageRgba8(pdf.render(page, 300.0)?);
+            match ext {
+                "png" => img.save_with_format(path, ImageFormat::Png)?,
+                _ => images::save(&img, path, ext, 90)?,
+            }
+            Ok(())
+        };
+
+        if count == 1 {
+            let staged = Staged::new(paths::output_for(input, ext, ""));
+            save(1, staged.path())?;
+            return staged.commit();
+        }
+        let base = paths::base(input);
+        let staged = Staged::new(paths::folder_for(input, &format!("{base} pages")));
+        fs::create_dir(staged.path())?;
+        for page in 1..=count {
+            cancel::check()?;
+            on(Event::Progress((page - 1) as f64 / count as f64));
+            save(page, &staged.path().join(format!("{base} - page {page}.{ext}")))?;
+        }
+        staged.commit()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (pdf_path, name_from, ext, on);
+        anyhow::bail!("pdf → image is mac-only for now")
+    }
+}
+
+fn text_of(input: &Path) -> Result<String> {
+    let doc = open(input)?;
+    let pages: Vec<u32> = doc.get_pages().into_keys().collect();
+    let mut text = String::new();
+    for page in pages {
+        cancel::check()?;
+        if let Ok(words) = doc.extract_text(&[page]) {
+            let lines: Vec<&str> = words.lines().map(str::trim_end).collect();
+            text.push_str(lines.join("\n").trim_end());
+            text.push_str("\n\n");
+        }
+    }
+    ensure!(
+        text.chars().any(char::is_alphanumeric),
+        "{} has no text in it — it's probably a scan",
+        paths::name(input)
+    );
+    Ok(text)
+}
+
+pub fn to_text(input: &Path) -> Result<PathBuf> {
+    let text = text_of(input)?;
+    let staged = Staged::new(paths::output_for(input, "txt", ""));
+    fs::write(staged.path(), text)?;
+    staged.commit()
+}
+
+/// The words of the pdf in a word document. Layout and pictures stay behind.
+pub fn to_docx(input: &Path) -> Result<PathBuf> {
+    let text = text_of(input)?;
+    let staged = Staged::new(paths::output_for(input, "docx", ""));
+    docs::text_into(&text, "docx", staged.path())?;
+    staged.commit()
+}
+
+/// Shrinks the photos inside: anything bigger than 2000px is scaled down and re-saved as jpeg.
+pub fn compress(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    const LONGEST: u32 = 2000;
+    let mut doc = open(input)?;
+    let ids: Vec<ObjectId> = doc.objects.keys().copied().collect();
+    for (i, id) in ids.iter().enumerate() {
+        cancel::check()?;
+        if i % 50 == 0 {
+            on(Event::Progress(i as f64 / ids.len() as f64 * 0.9));
+        }
+        let Some(components) = image_components(&doc, *id) else { continue };
+        let Ok(Object::Stream(stream)) = doc.get_object(*id) else { continue };
+        let Some(img) = decode_image(stream, components) else { continue };
+
+        let img = if img.width().max(img.height()) > LONGEST {
+            img.resize(LONGEST, LONGEST, image::imageops::FilterType::Lanczos3)
+        } else {
+            img
+        };
+        let img = if components == 1 { DynamicImage::ImageLuma8(img.to_luma8()) } else { DynamicImage::ImageRgb8(img.to_rgb8()) };
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 60).encode_image(&img)?;
+        if jpeg.len() >= stream.content.len() {
+            continue;
+        }
+
+        let Ok(Object::Stream(stream)) = doc.get_object_mut(*id) else { continue };
+        stream.dict.set("Width", img.width() as i64);
+        stream.dict.set("Height", img.height() as i64);
+        stream.dict.set("BitsPerComponent", 8);
+        stream.dict.set("Filter", "DCTDecode");
+        stream.dict.remove(b"DecodeParms");
+        stream.set_content(jpeg);
+    }
+
+    let staged = Staged::new(paths::output_for(input, "pdf", " (compressed)"));
+    save(&mut doc, staged.path())?;
+    let (before, after) = (fs::metadata(input)?.len(), fs::metadata(staged.path())?.len());
+    ensure!(after < before, "{} is already as small as it gets", paths::name(input));
+    staged.commit()
+}
+
+/// 1 (gray) or 3 (rgb) for an ordinary 8-bit image we know how to re-encode; None for anything else.
+fn image_components(doc: &Document, id: ObjectId) -> Option<u8> {
+    let Ok(Object::Stream(stream)) = doc.get_object(id) else { return None };
+    let dict = &stream.dict;
+    if dict.get(b"Subtype").and_then(Object::as_name).ok()? != b"Image"
+        || dict.get(b"ImageMask").and_then(Object::as_bool).unwrap_or(false)
+        || dict.has(b"Decode")
+        || dict.get(b"BitsPerComponent").and_then(Object::as_i64).unwrap_or(8) != 8
+    {
+        return None;
+    }
+    let space = dict.get(b"ColorSpace").ok()?;
+    let space = match space {
+        Object::Reference(r) => doc.get_object(*r).ok()?,
+        other => other,
+    };
+    match space {
+        Object::Name(n) if n == b"DeviceRGB" => Some(3),
+        Object::Name(n) if n == b"DeviceGray" => Some(1),
+        Object::Array(a) if a.first().and_then(|o| o.as_name().ok()) == Some(b"ICCBased") => {
+            let profile = doc.get_object(a.get(1)?.as_reference().ok()?).ok()?.as_stream().ok()?;
+            match profile.dict.get(b"N").and_then(Object::as_i64).ok()? {
+                n @ (1 | 3) => Some(n as u8),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn decode_image(stream: &Stream, components: u8) -> Option<DynamicImage> {
+    let filters = stream.filters().ok()?;
+    match filters.as_slice() {
+        [f] if f == b"DCTDecode" => image::load_from_memory_with_format(&stream.content, ImageFormat::Jpeg).ok(),
+        [f] if f == b"FlateDecode" => {
+            let w = stream.dict.get(b"Width").and_then(Object::as_i64).ok()? as u32;
+            let h = stream.dict.get(b"Height").and_then(Object::as_i64).ok()? as u32;
+            let raw = stream.decompressed_content().ok()?;
+            match components {
+                3 => image::RgbImage::from_raw(w, h, raw).map(DynamicImage::ImageRgb8),
+                _ => image::GrayImage::from_raw(w, h, raw).map(DynamicImage::ImageLuma8),
+            }
+        }
+        _ => None,
     }
 }

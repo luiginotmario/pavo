@@ -16,3 +16,4 @@ resvg = "0.48.1"
 tar = "0.4.46"
 webp = { version = "0.3.1", default-features = false }
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+

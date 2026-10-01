@@ -149,6 +149,7 @@ fn audio_codec(ff: &Path, ext: &str) -> Result<Vec<String>> {
         "opus" => strs(&["-c:a", "libopus", "-b:a", "128k"]),
         "ogg" if has_encoder(ff, "libvorbis") => strs(&["-c:a", "libvorbis", "-q:a", "5"]),
         "ogg" => strs(&["-c:a", "libopus", "-b:a", "160k"]),
+        "wma" => strs(&["-c:a", "wmav2", "-b:a", "192k"]),
         other => bail!("can't make .{other} audio"),
     })
 }
@@ -157,7 +158,7 @@ pub fn convert(input: &Path, ext: &str, on: &mut dyn FnMut(Event)) -> Result<Pat
     let ff = binary()?;
     let p = probe(&ff, input)?;
     let from_gif = paths::ext(input) == "gif";
-    let audio_only = matches!(ext, "mp3" | "m4a" | "wav" | "flac" | "ogg" | "opus" | "aiff");
+    let audio_only = matches!(ext, "mp3" | "m4a" | "wav" | "flac" | "ogg" | "opus" | "aiff" | "wma");
     if audio_only {
         ensure!(p.audio.is_some(), "{} has no sound in it", paths::name(input));
     } else {
@@ -199,6 +200,11 @@ pub fn convert(input: &Path, ext: &str, on: &mut dyn FnMut(Event)) -> Result<Pat
             } else {
                 args.extend(strs(&["-c:a", "pcm_s16le"]));
             }
+        }
+        "wmv" => {
+            args.extend(strs(&["-map", "0:v:0", "-map", "0:a?", "-c:v", "wmv2"]));
+            args.extend(["-b:v".into(), bitrate(&p, 4.0, None)]);
+            args.extend(strs(&["-c:a", "wmav2", "-b:a", "160k"]));
         }
         "gif" => args.extend(strs(&["-vf", GIF_FILTER, "-loop", "0", "-an"])),
         _ if audio_only => {
@@ -266,11 +272,230 @@ pub fn strip_metadata(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf
     staged.commit()
 }
 
+fn is_audio_ext(ext: &str) -> bool {
+    matches!(ext, "mp3" | "m4a" | "aac" | "wav" | "flac" | "ogg" | "oga" | "opus" | "aiff" | "aif" | "wma")
+}
+
+/// Keeps `start`..`end` (seconds). Video is re-encoded so the cut lands on the exact frame.
+pub fn trim(input: &Path, start: f64, end: f64, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    trim_to(input, start, end, " (trimmed)", on)
+}
+
+/// Two halves, `name (part 1)` and `name (part 2)`.
+pub fn split(input: &Path, on: &mut dyn FnMut(Event)) -> Result<Vec<PathBuf>> {
+    let ff = binary()?;
+    let duration = probe(&ff, input)?.duration.context("couldn't tell how long this is")?;
+    let half = duration / 2.0;
+    let first = trim_to(input, 0.0, half, " (part 1)", &mut |e| {
+        if let Event::Progress(f) = e {
+            on(Event::Progress(f / 2.0))
+        }
+    })?;
+    let second = trim_to(input, half, duration, " (part 2)", &mut |e| {
+        if let Event::Progress(f) = e {
+            on(Event::Progress(0.5 + f / 2.0))
+        }
+    })?;
+    Ok(vec![first, second])
+}
+
+/// The biggest `w`:`h` area from the middle of the frame.
+pub fn crop(input: &Path, w: u32, h: u32, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
+    let ratio = w as f64 / h as f64;
+    let ext = paths::ext(input);
+    let ext = if matches!(ext.as_str(), "mov" | "mp4" | "m4v") { ext } else { "mp4".into() };
+    let mut args = strs(&["-map", "0:v:0", "-map", "0:a?"]);
+    let mut video = h264(&ff, &p, 4.0, None);
+    video[1] = format!(
+        "crop=w='if(gt(iw/ih,{ratio}),ih*{ratio},iw)':h='if(gt(iw/ih,{ratio}),ih,iw/{ratio})',{}",
+        video[1]
+    );
+    args.extend(video);
+    args.extend(strs(&["-c:a", "copy", "-movflags", "+faststart"]));
+    let label = if w == h { " (square)".to_string() } else { format!(" ({w}x{h})") };
+    let staged = Staged::new(paths::output_for(input, &ext, &label));
+    run(&ff, input, staged.path(), &args, p.duration, on)?;
+    staged.commit()
+}
+
+/// Several videos (or several audio files) one after another. Videos take the first one's size.
+pub fn join(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    ensure!(inputs.len() > 1, "join needs at least two files");
+    let ff = binary()?;
+    let probes = inputs.iter().map(|i| probe(&ff, i)).collect::<Result<Vec<_>>>()?;
+    let total: f64 = probes.iter().filter_map(|p| p.duration).sum();
+    let video = probes.iter().all(|p| p.video.is_some());
+    let audio = probes.iter().all(|p| p.audio.is_some());
+    ensure!(video || audio, "these files can't be joined");
+
+    let mut graph = String::new();
+    let mut streams = String::new();
+    let (w, h) = (probes[0].width.max(2) / 2 * 2, probes[0].height.max(2) / 2 * 2);
+    for i in 0..inputs.len() {
+        if video {
+            graph.push_str(&format!(
+                "[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[v{i}];"
+            ));
+            streams.push_str(&format!("[v{i}]"));
+        }
+        if audio {
+            graph.push_str(&format!("[{i}:a]aresample=48000,aformat=channel_layouts=stereo[a{i}];"));
+            streams.push_str(&format!("[a{i}]"));
+        }
+    }
+    graph.push_str(&format!("{streams}concat=n={}:v={}:a={}", inputs.len(), video as u8, audio as u8));
+    graph.push_str(match (video, audio) {
+        (true, true) => "[v][a]",
+        (true, false) => "[v]",
+        _ => "[a]",
+    });
+
+    let mut args = vec!["-filter_complex".to_string(), graph];
+    let ext = if video {
+        args.extend(strs(&["-map", "[v]"]));
+        if audio {
+            args.extend(strs(&["-map", "[a]"]));
+        }
+        args.extend(h264(&ff, &probes[0], 4.0, None).split_off(2)); // the graph already sized it
+        if audio {
+            args.extend(aac(&ff, 160));
+        }
+        args.extend(strs(&["-movflags", "+faststart"]));
+        "mp4".to_string()
+    } else {
+        let ext = paths::ext(&inputs[0]);
+        let ext = if audio_codec(&ff, &ext).is_ok() { ext } else { "m4a".into() };
+        args.extend(strs(&["-map", "[a]"]));
+        args.extend(audio_codec(&ff, &ext)?);
+        ext
+    };
+
+    let refs: Vec<&Path> = inputs.iter().map(PathBuf::as_path).collect();
+    let staged = Staged::new(paths::output_for(&inputs[0], &ext, " (joined)"));
+    run_inputs(&ff, &[], &refs, staged.path(), &args, Some(total), on)?;
+    staged.commit()
+}
+
+fn trim_to(input: &Path, start: f64, end: f64, label: &str, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    let end = p.duration.map_or(end, |d| end.min(d));
+    ensure!(start >= 0.0 && end > start, "the end has to come after the start");
+
+    let ext = paths::ext(input);
+    let (out_ext, args) = if is_audio_ext(&ext) {
+        let ext = if ext == "aac" { "m4a".to_string() } else { ext };
+        let codec = audio_codec(&ff, &ext).unwrap_or_else(|_| strs(&["-c:a", "copy"]));
+        (ext, [strs(&["-map", "0:a:0"]), codec].concat())
+    } else {
+        ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
+        let ext = if matches!(ext.as_str(), "mov" | "mp4" | "m4v") { ext } else { "mp4".into() };
+        let mut args = strs(&["-map", "0:v:0", "-map", "0:a?"]);
+        args.extend(h264(&ff, &p, 4.0, None));
+        args.extend(aac(&ff, 160));
+        args.extend(strs(&["-movflags", "+faststart"]));
+        (ext, args)
+    };
+    let before = vec!["-ss".into(), format!("{start:.3}"), "-t".into(), format!("{:.3}", end - start)];
+    let staged = Staged::new(paths::output_for(input, &out_ext, label));
+    run_from(&ff, &before, input, staged.path(), &args, Some(end - start), on)?;
+    staged.commit()
+}
+
+/// The same video without its sound. Nothing is re-encoded.
+pub fn mute(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
+    let args = strs(&["-map", "0:v", "-c", "copy", "-an"]);
+    let staged = Staged::new(paths::output_for(input, &paths::ext(input), " (muted)"));
+    run(&ff, input, staged.path(), &args, p.duration, on)?;
+    staged.commit()
+}
+
+/// A quarter turn clockwise.
+pub fn rotate(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
+    let ext = paths::ext(input);
+    let ext = if matches!(ext.as_str(), "mov" | "mp4" | "m4v") { ext } else { "mp4".into() };
+    let mut args = strs(&["-map", "0:v:0", "-map", "0:a?"]);
+    let mut video = h264(&ff, &p, 4.0, None);
+    video[1] = format!("transpose=1,{}", video[1]); // rotate before the even-size scale
+    args.extend(video);
+    args.extend(strs(&["-c:a", "copy", "-movflags", "+faststart"]));
+    let staged = Staged::new(paths::output_for(input, &ext, " (rotated)"));
+    run(&ff, input, staged.path(), &args, p.duration, on)?;
+    staged.commit()
+}
+
+/// A still from one second in (the very first frame is often black).
+pub fn frame(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
+    let at = p.duration.map_or(0.0, |d| (d / 2.0).min(1.0));
+    let before = vec!["-ss".into(), format!("{at:.3}")];
+    let args = strs(&["-frames:v", "1", "-update", "1"]);
+    let staged = Staged::new(paths::output_for(input, "png", " (frame)"));
+    run_from(&ff, &before, input, staged.path(), &args, None, on)?;
+    staged.commit()
+}
+
+/// Smaller audio: 96 kbps aac, which still sounds fine for voice and most music.
+pub fn compress_audio(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.audio.is_some(), "{} has no sound in it", paths::name(input));
+    let mut args = strs(&["-vn", "-map", "0:a:0"]);
+    args.extend(aac(&ff, 96));
+    let staged = Staged::new(paths::output_for(input, "m4a", " (compressed)"));
+    run(&ff, input, staged.path(), &args, p.duration, on)?;
+    let (before, after) = (fs::metadata(input)?.len(), fs::metadata(staged.path())?.len());
+    ensure!(after < before, "{} is already as small as it gets", paths::name(input));
+    staged.commit()
+}
+
 fn run(ff: &Path, input: &Path, out: &Path, args: &[String], duration: Option<f64>, on: &mut dyn FnMut(Event)) -> Result<()> {
+    run_from(ff, &[], input, out, args, duration, on)
+}
+
+/// `before` goes ahead of `-i`, where seeking is fast.
+fn run_from(
+    ff: &Path,
+    before: &[String],
+    input: &Path,
+    out: &Path,
+    args: &[String],
+    duration: Option<f64>,
+    on: &mut dyn FnMut(Event),
+) -> Result<()> {
+    run_inputs(ff, before, &[input], out, args, duration, on)
+}
+
+fn run_inputs(
+    ff: &Path,
+    before: &[String],
+    inputs: &[&Path],
+    out: &Path,
+    args: &[String],
+    duration: Option<f64>,
+    on: &mut dyn FnMut(Event),
+) -> Result<()> {
     cancel::check()?;
-    let mut child = Command::new(ff)
-        .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats", "-i"])
-        .arg(input)
+    let input = inputs[0];
+    let mut command = Command::new(ff);
+    command
+        .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats"])
+        .args(before);
+    for path in inputs {
+        command.arg("-i").arg(path);
+    }
+    let mut child = command
         .args(args)
         .arg(out)
         .stdin(Stdio::null())

@@ -6,8 +6,10 @@ use anyhow::{Context, Result};
 /// Lowercased extension. `archive.tar.gz` → `tar.gz`.
 pub fn ext(path: &Path) -> String {
     let name = name(path).to_lowercase();
-    if name.ends_with(".tar.gz") {
-        return "tar.gz".into();
+    for double in ["tar.gz", "tar.xz", "tar.bz2"] {
+        if name.ends_with(&format!(".{double}")) {
+            return double.into();
+        }
     }
     path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default()
 }

@@ -83,7 +83,7 @@ fn jpeg_bytes(img: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn save(img: &DynamicImage, path: &Path, ext: &str, quality: u8) -> Result<()> {
+pub(crate) fn save(img: &DynamicImage, path: &Path, ext: &str, quality: u8) -> Result<()> {
     match ext {
         "jpg" | "jpeg" => fs::write(path, jpeg_bytes(img, quality)?)?,
         "png" => img.save_with_format(path, ImageFormat::Png)?,
@@ -92,13 +92,14 @@ fn save(img: &DynamicImage, path: &Path, ext: &str, quality: u8) -> Result<()> {
             let encoded = webp::Encoder::from_rgba(&rgba, rgba.width(), rgba.height()).encode(quality as f32);
             fs::write(path, &*encoded)?;
         }
-        "tiff" => img.save_with_format(path, ImageFormat::Tiff)?,
+        "tiff" | "tif" => img.save_with_format(path, ImageFormat::Tiff)?,
         "bmp" => DynamicImage::ImageRgba8(img.to_rgba8()).save_with_format(path, ImageFormat::Bmp)?,
         "gif" => DynamicImage::ImageRgba8(img.to_rgba8()).save_with_format(path, ImageFormat::Gif)?,
-        "heic" => {
+        "heic" | "heif" | "avif" => {
+            let format = if ext == "avif" { "avif" } else { "heic" };
             let png = Scratch::new("png");
             img.save_with_format(&png.0, ImageFormat::Png)?;
-            sips(&["-s", "format", "heic", "-s", "formatOptions", &quality.to_string()], &png.0, path)?;
+            sips(&["-s", "format", format, "-s", "formatOptions", &quality.to_string()], &png.0, path)?;
         }
         "pdf" => {
             let mut pdf = PdfWriter::default();
@@ -114,6 +115,41 @@ pub fn convert(input: &Path, ext: &str) -> Result<PathBuf> {
     let img = load(input)?;
     let staged = Staged::new(paths::output_for(input, ext, ""));
     save(&img, staged.path(), ext, 90)?;
+    staged.commit()
+}
+
+/// Cuts the biggest `w`:`h` area out of the middle of the picture.
+pub fn crop(input: &Path, w: u32, h: u32) -> Result<PathBuf> {
+    let ext = paths::ext(input);
+    let img = load(input)?;
+    let (iw, ih) = (img.width(), img.height());
+    let (cw, ch) = if iw as u64 * h as u64 > ih as u64 * w as u64 {
+        ((ih as u64 * w as u64 / h as u64) as u32, ih)
+    } else {
+        (iw, (iw as u64 * h as u64 / w as u64) as u32)
+    };
+    let label = if w == h { " (square)".to_string() } else { format!(" ({w}x{h})") };
+    let staged = Staged::new(paths::output_for(input, &ext, &label));
+    save(&img.crop_imm((iw - cw) / 2, (ih - ch) / 2, cw, ch), staged.path(), &ext, 92)?;
+    staged.commit()
+}
+
+/// Turns the picture a quarter turn clockwise.
+pub fn rotate(input: &Path) -> Result<PathBuf> {
+    let ext = paths::ext(input);
+    let staged = Staged::new(paths::output_for(input, &ext, " (rotated)"));
+    save(&load(input)?.rotate90(), staged.path(), &ext, 92)?;
+    staged.commit()
+}
+
+/// Half the width and height: a quarter of the pixels.
+pub fn shrink(input: &Path) -> Result<PathBuf> {
+    let ext = paths::ext(input);
+    let img = load(input)?;
+    ensure!(img.width() >= 32 && img.height() >= 32, "{} is already tiny", paths::name(input));
+    let staged = Staged::new(paths::output_for(input, &ext, " (smaller)"));
+    let half = img.resize_exact(img.width() / 2, img.height() / 2, image::imageops::FilterType::Lanczos3);
+    save(&half, staged.path(), &ext, 90)?;
     staged.commit()
 }
 
@@ -142,6 +178,7 @@ pub fn compress(input: &Path) -> Result<PathBuf> {
         }
         "jpg" | "jpeg" | "webp" => save(&load(input)?, staged.path(), &ext, 72)?,
         "heic" | "heif" => sips(&["-s", "format", "heic", "-s", "formatOptions", "50"], input, staged.path())?,
+        "avif" => sips(&["-s", "format", "avif", "-s", "formatOptions", "50"], input, staged.path())?,
         other => bail!("can't compress .{other} yet"),
     }
     let (before, after) = (fs::metadata(input)?.len(), fs::metadata(staged.path())?.len());
