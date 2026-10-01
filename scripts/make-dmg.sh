@@ -15,11 +15,17 @@ venv="${TMPDIR:-/tmp}/pavo-dmgbuild"
 rm -f "$dmg"
 "$venv/bin/dmgbuild" -s apps/macos/dmg/settings.py -D app="$app" "Pavo" "$dmg"
 
+identity=$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)
+if [ -n "$identity" ]; then
+  codesign --force --timestamp --sign "$identity" "$dmg"
+fi
+
 profile="${NOTARY_PROFILE:-pavo}"
 if xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1; then
   echo "→ notarizing (a few minutes)"
   xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait
   xcrun stapler staple "$dmg"
+  spctl --assess --type open --context context:primary-signature --verbose "$dmg"
 else
   echo "  not notarized: no '$profile' notary profile in the keychain"
 fi

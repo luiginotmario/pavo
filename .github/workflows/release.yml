@@ -1,6 +1,8 @@
 name: release
 
-# push a tag like v0.2.0 and this builds Pavo.dmg and attaches it to that release
+# push a tag like v0.2.0 and this builds Pavo.dmg and attaches it to that release, unless one is
+# already there: releases built on a mac with the developer id certificate are signed and notarized,
+# and ci has neither, so it never replaces them
 on:
   push:
     tags: ["v*"]
@@ -28,4 +30,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "pavo $GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" build/Pavo.dmg --clobber
+          if gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name' | grep -qx Pavo.dmg; then
+            echo "Pavo.dmg is already attached, leaving it alone"
+          else
+            gh release upload "$GITHUB_REF_NAME" build/Pavo.dmg
+          fi

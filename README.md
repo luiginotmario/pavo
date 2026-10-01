@@ -36,7 +36,7 @@ video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from sou
 
 grab **[Pavo.dmg](https://github.com/luiginotmario/pavo/releases/latest/download/Pavo.dmg)**, open it, drag the peacock into applications. apple silicon, macos 14 or newer.
 
-the first time you open it, macos will say it can't verify pavo (it isn't notarized yet). open **system settings → privacy & security**, scroll down and click **open anyway**. you only do this once.
+signed and notarized by apple, so it opens like any other app.
 
 ## if you wanna make an addition + pr, or just wanna remix it for yourself, go for it
 
