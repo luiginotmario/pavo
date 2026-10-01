@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<rect x="100" y="100" width="824" height="824" rx="185" fill="#0c0c0d"/>
+<g stroke="#f1efe8" stroke-width="14" stroke-linecap="round" fill="none">
+<line x1="512" y1="632" x2="226.7" y2="539.3"/>
+<line x1="512" y1="632" x2="289.1" y2="431.3"/>
+<line x1="512" y1="632" x2="390.0" y2="357.9"/>
+<line x1="512" y1="632" x2="512.0" y2="332.0"/>
+<line x1="512" y1="632" x2="634.0" y2="357.9"/>
+<line x1="512" y1="632" x2="734.9" y2="431.3"/>
+<line x1="512" y1="632" x2="797.3" y2="539.3"/>
+<g transform="rotate(-72.0 226.7 539.3)"><ellipse cx="226.7" cy="539.3" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="226.7" cy="545.3" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(-48.0 289.1 431.3)"><ellipse cx="289.1" cy="431.3" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="289.1" cy="437.3" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(-24.0 390.0 357.9)"><ellipse cx="390.0" cy="357.9" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="390.0" cy="363.9" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(0.0 512.0 332.0)"><ellipse cx="512.0" cy="332.0" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="512.0" cy="338.0" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(24.0 634.0 357.9)"><ellipse cx="634.0" cy="357.9" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="634.0" cy="363.9" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(48.0 734.9 431.3)"><ellipse cx="734.9" cy="431.3" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="734.9" cy="437.3" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<g transform="rotate(72.0 797.3 539.3)"><ellipse cx="797.3" cy="539.3" rx="40" ry="54" fill="#0c0c0d"/><ellipse cx="797.3" cy="545.3" rx="18" ry="24" fill="#f1efe8" stroke="none"/></g>
+<ellipse cx="512" cy="672" rx="58" ry="78" fill="#0c0c0d"/>
+<path d="M490 642 C 486 582, 506 532, 522 492" />
+<circle cx="526" cy="474" r="26" fill="#0c0c0d"/>
+<path d="M550 470 L 576 480 L 550 490" stroke-linejoin="round"/>
+</g>
+<circle cx="532" cy="470" r="6" fill="#f1efe8"/>
+</svg>

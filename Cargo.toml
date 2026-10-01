@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/cambio-core", "crates/cambio-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/luiginotmario/cambio"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

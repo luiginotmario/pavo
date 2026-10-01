@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Cambio</string>
+    <key>CFBundleDisplayName</key>
+    <string>Cambio</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.giginotmario.cambio</string>
+    <key>CFBundleExecutable</key>
+    <string>Cambio</string>
+    <key>CFBundleIconFile</key>
+    <string>Cambio</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__VERSION__</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>MIT licensed. Made by @giginotmario.</string>
+</dict>
+</plist>
