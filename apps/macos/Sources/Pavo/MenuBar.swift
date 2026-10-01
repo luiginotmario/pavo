@@ -1,34 +1,17 @@
 import AppKit
-import os
+import Observation
 
-private let log = Logger(subsystem: "com.giginotmario.pavo", category: "conversion")
-
-/// The whole app: a peacock in the menu bar. Drop files on it (or click it and choose some),
-/// pick what to turn them into, and the results land next to the originals.
+/// The peacock in the menu bar. Click it, or drop files on it, and the panel opens underneath.
+/// While something converts, the progress sits next to the icon.
 final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
-    private enum State {
-        case idle
-        case converting(Conversion)
-        case done([URL])
-        case failed(String)
-    }
-
-    /// What a menu item hands back when it's picked.
-    private struct Pick {
-        let action: String
-        let urls: [URL]
-    }
-
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    private let engine = Engine()
-    private var state = State.idle
+    private let converter = Converter()
+    private let wheel: Wheel
+    private lazy var panel = MenuPanel(converter: converter) { self.chooseFiles() }
     private var badgeReset: Task<Void, Never>?
 
-    private var isConverting: Bool {
-        if case .converting = state { true } else { false }
-    }
-
     override init() {
+        wheel = Wheel(converter: converter)
         super.init()
         guard let button = item.button else { return }
         button.image = PeacockIcon.make()
@@ -39,12 +22,24 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         // the button lives in its own little window; registering it is what makes the icon a drop target
         button.window?.registerForDraggedTypes([.fileURL])
         button.window?.delegate = self
+        followConverter()
+
+        // right-click files → Convert with Pavo (the service is declared in Info.plist)
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
+    }
+
+    // MARK: right-click → Convert with Pavo
+
+    @objc func convertFiles(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        wheel.open(for: urls)
     }
 
     // MARK: dropping files on the icon
 
     func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard !isConverting, !fileURLs(in: sender).isEmpty else { return [] }
+        guard !converter.isWorking, !fileURLs(in: sender).isEmpty else { return [] }
         item.button?.highlight(true)
         return .copy
     }
@@ -56,9 +51,9 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         item.button?.highlight(false)
         let urls = fileURLs(in: sender)
-        guard !isConverting, !urls.isEmpty else { return false }
-        // runs after the drag has finished, so the menu can take over the mouse
-        Task { await offerActions(for: urls) }
+        guard !converter.isWorking, !urls.isEmpty else { return false }
+        openPanel()
+        Task { await converter.load(urls) }
         return true
     }
 
@@ -66,165 +61,57 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
     }
 
-    // MARK: menus
+    // MARK: the panel
 
     @objc private func clicked() {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-
-        switch state {
-        case .converting(let conversion):
-            menu.addItem(.label("converting \(conversion.name)… \(percent(conversion.progress))"))
-            menu.addItem(entry("cancel", #selector(cancel)))
-        case .done(let urls):
-            menu.addItem(entry("show \(urls.displayName) in finder", #selector(reveal)))
-            menu.addItem(.separator())
-            addStartItems(to: menu)
-        case .failed(let message):
-            menu.addItem(.label("couldn't do that: \(message.prefix(80))"))
-            menu.addItem(.separator())
-            addStartItems(to: menu)
-            // once it's been read, the error is done
-            state = .idle
-            setBadge(nil)
-        case .idle:
-            addStartItems(to: menu)
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(entry("quit pavo", #selector(quit), key: "q"))
-        show(menu)
-    }
-
-    private func addStartItems(to menu: NSMenu) {
-        menu.addItem(.label("drop a file on the peacock to convert it"))
-        menu.addItem(entry("choose files…", #selector(chooseFiles)))
-    }
-
-    private func offerActions(for urls: [URL]) async {
-        let menu = NSMenu()
-        menu.autoenablesItems = false
-        menu.addItem(.label(urls.displayName))
-
-        do {
-            let actions = try await engine.actions(for: urls)
-            let conversions = actions.filter(\.isConversion)
-            let tools = actions.filter { !$0.isConversion }
-            if !conversions.isEmpty {
-                menu.addItem(.separator())
-                menu.addItem(.label("convert to"))
-                for action in conversions {
-                    menu.addItem(entry(for: action, urls))
-                }
-            }
-            if !tools.isEmpty {
-                menu.addItem(.separator())
-                for action in tools {
-                    menu.addItem(entry(for: action, urls))
-                }
-            }
-            if actions.isEmpty {
-                menu.addItem(.label("nothing to do with this yet"))
-            }
-        } catch {
-            log.error("couldn't list actions: \(error.localizedDescription, privacy: .public)")
-            menu.addItem(.label("couldn't read \(urls.count == 1 ? "that file" : "those files")"))
-        }
-        show(menu)
-    }
-
-    /// Pops a menu down from the icon, exactly where a click would put it.
-    private func show(_ menu: NSMenu) {
-        item.menu = menu
-        item.button?.performClick(nil)
-        item.menu = nil
-    }
-
-    private func entry(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.target = self
-        return item
-    }
-
-    private func entry(for action: Engine.Action, _ urls: [URL]) -> NSMenuItem {
-        let item = entry(action.label, #selector(picked(_:)))
-        item.representedObject = Pick(action: action.id, urls: urls)
-        return item
-    }
-
-    // MARK: actions
-
-    @objc private func picked(_ sender: NSMenuItem) {
-        guard let pick = sender.representedObject as? Pick, !isConverting else { return }
-        let conversion: Conversion
-        do {
-            conversion = try engine.convert(pick.urls, with: pick.action)
-        } catch {
-            log.error("couldn't start the cli: \(error.localizedDescription, privacy: .public)")
-            finish(.failed("couldn't start the converter"))
-            return
-        }
-
-        state = .converting(conversion)
-        setBadge(percent(0))
-        Task {
-            do throws(Conversion.Failure) {
-                let outputs = try await conversion.run { fraction in setBadge(percent(fraction)) }
-                finish(outputs.isEmpty ? .idle : .done(outputs))
-            } catch .cancelled {
-                finish(.idle)
-            } catch .failed(let message) {
-                log.error("\(pick.action, privacy: .public) failed: \(message, privacy: .private)")
-                finish(.failed(message))
-            }
-        }
-    }
-
-    private func finish(_ next: State) {
-        state = next
-        switch next {
-        case .done: setBadge("✓", clearAfter: .seconds(2))
-        case .failed: setBadge("!")
-        case .idle, .converting: setBadge(nil)
-        }
-    }
-
-    @objc private func cancel() {
-        if case .converting(let conversion) = state {
-            conversion.cancel()
-        }
-    }
-
-    @objc private func reveal() {
-        if case .done(let urls) = state {
-            NSWorkspace.shared.activateFileViewerSelecting(urls)
-        }
-    }
-
-    @objc private func chooseFiles() {
-        if #available(macOS 14, *) {
-            NSApp.activate()
+        if panel.isOpen {
+            panel.close()
         } else {
-            NSApp.activate(ignoringOtherApps: true)
+            openPanel()
         }
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = true
-        panel.prompt = "Choose"
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        let urls = panel.urls
-        Task { await offerActions(for: urls) }
     }
 
-    @objc private func quit() {
-        cancel()
-        NSApp.terminate(nil)
+    private func openPanel() {
+        guard let button = item.button, let window = button.window else { return }
+        panel.open(below: window.convertToScreen(button.convert(button.bounds, to: nil)))
+    }
+
+    private func chooseFiles() {
+        panel.close()
+        NSApp.activate()
+        let open = NSOpenPanel()
+        open.allowsMultipleSelection = true
+        open.canChooseDirectories = true
+        open.prompt = "Choose"
+        guard open.runModal() == .OK, !open.urls.isEmpty else { return }
+        let urls = open.urls
+        openPanel()
+        Task { await converter.load(urls) }
     }
 
     // MARK: the little text next to the icon
 
-    private func percent(_ fraction: Double) -> String {
-        "\(Int(fraction * 100))%"
+    /// Re-renders the badge whenever the converter changes.
+    private func followConverter() {
+        withObservationTracking {
+            updateBadge()
+        } onChange: {
+            Task { @MainActor in self.followConverter() }
+        }
+    }
+
+    private func updateBadge() {
+        switch converter.phase {
+        case .working:
+            setBadge("\(Int(converter.progress * 100))%")
+        case .failed:
+            setBadge("!")
+        case .done:
+            let shownFor = converter.finishedAt.map { Date.now.timeIntervalSince($0) } ?? 99
+            setBadge(shownFor < 2 ? "✓" : nil, clearAfter: .seconds(2 - shownFor))
+        case .empty, .loading, .choosing:
+            setBadge(nil)
+        }
     }
 
     private func setBadge(_ text: String?, clearAfter delay: Duration? = nil) {
@@ -232,8 +119,7 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         guard let button = item.button else { return }
         button.title = text.map { " " + $0 } ?? ""
         item.length = text == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
-
-        guard let delay else { return }
+        guard text != nil, let delay, delay > .zero else { return }
         badgeReset = Task {
             do {
                 try await Task.sleep(for: delay)
@@ -242,14 +128,5 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
             }
             setBadge(nil)
         }
-    }
-}
-
-private extension NSMenuItem {
-    /// A line of text in a menu that can't be clicked.
-    static func label(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
     }
 }

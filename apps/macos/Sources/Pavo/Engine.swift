@@ -6,9 +6,8 @@ struct Engine {
     struct Action: Decodable {
         let id: String
         let label: String
+        /// "convert", "edit" or "tool".
         let group: String
-
-        var isConversion: Bool { group == "convert" }
     }
 
     private let cli = if let path = ProcessInfo.processInfo.environment["PAVO_CLI"] {

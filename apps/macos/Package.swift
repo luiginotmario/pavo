@@ -9,7 +9,7 @@ let settings: [SwiftSetting] = [
 
 let package = Package(
     name: "Pavo",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(name: "Pavo", path: "Sources/Pavo", swiftSettings: settings),
         .testTarget(name: "PavoTests", dependencies: ["Pavo"], path: "Tests/PavoTests", swiftSettings: settings),
