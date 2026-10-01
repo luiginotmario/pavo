@@ -30,13 +30,19 @@ three ways in:
 
 nothing is ever overwritten. if `clip.mp4` already exists you get `clip 2.mp4`.
 
-video goes through [ffmpeg](https://ffmpeg.org) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`). everything else is plain rust.
+video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from source by `scripts/build-ffmpeg.sh`, bundled inside the app) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`). everything else is plain rust.
+
+## download
+
+grab **[Pavo.dmg](https://github.com/luiginotmario/pavo/releases/latest/download/Pavo.dmg)**, open it, drag the peacock into applications. apple silicon, macos 14 or newer.
+
+the first time you open it, macos will say it can't verify pavo (it isn't notarized yet). open **system settings → privacy & security**, scroll down and click **open anyway**. you only do this once.
 
 ## if you wanna make an addition + pr, or just wanna remix it for yourself, go for it
 
 - clone the repo
 - install [rust](https://rustup.rs) and ffmpeg (`brew install ffmpeg`)
-- run `./scripts/build.sh`
+- run `./scripts/build.sh` (and `./scripts/build-ffmpeg.sh` once first, if you want video to work without homebrew)
 - open `build/Pavo.app` — done, you're up and running.
 
 make changes on a pr and i'll build a new version :)

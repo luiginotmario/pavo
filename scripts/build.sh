@@ -31,13 +31,23 @@ done
 iconutil -c icns "$work/Pavo.iconset" -o "$app/Contents/Resources/Pavo.icns"
 rm -rf "$work"
 
-# releases ship a standalone ffmpeg inside the app: FFMPEG=/path/to/ffmpeg ./scripts/build.sh
-if [ -n "${FFMPEG:-}" ]; then
-  cp "$FFMPEG" "$app/Contents/Helpers/ffmpeg"
+# the standalone ffmpeg from scripts/build-ffmpeg.sh, if it's been built (releases always have it)
+if [ -x vendor/ffmpeg/bin/ffmpeg ]; then
+  cp vendor/ffmpeg/bin/ffmpeg "$app/Contents/Helpers/ffmpeg"
+  strip -x "$app/Contents/Helpers/ffmpeg"
+  cp vendor/ffmpeg/LICENSE.md "$app/Contents/Resources/ffmpeg-LICENSE.md"
+else
+  echo "  (no bundled ffmpeg: run scripts/build-ffmpeg.sh for video in a release; a local build uses homebrew's)"
 fi
 
-# ad-hoc signature so macOS will open a local build
-codesign --force --sign - "$app/Contents/Helpers/"*
-codesign --force --sign - "$app"
+# sign with your Developer ID if it's in the keychain, otherwise ad-hoc for local runs
+identity=$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)
+sign=(codesign --force --options runtime --timestamp --sign "${identity:-}")
+if [ -z "$identity" ]; then
+  sign=(codesign --force --sign -)
+fi
+"${sign[@]}" "$app/Contents/Helpers/"*
+"${sign[@]}" "$app"
+echo "  signed: ${identity:-ad-hoc (local only)}"
 
 echo "✓ $app"

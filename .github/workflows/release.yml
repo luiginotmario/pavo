@@ -1,0 +1,31 @@
+name: release
+
+# push a tag like v0.2.0 and this builds Pavo.dmg and attaches it to that release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
+        with:
+          path: vendor/ffmpeg
+          key: ffmpeg-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - run: ./scripts/build-ffmpeg.sh
+      - run: ./scripts/build.sh
+      - run: ./scripts/make-dmg.sh
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "pavo $GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" build/Pavo.dmg --clobber

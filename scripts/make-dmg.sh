@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# packs build/Pavo.app into build/Pavo.dmg: the pencil "drag it over" window.
+# notarizes it too when a notary profile exists: xcrun notarytool store-credentials pavo
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+app=build/Pavo.app
+dmg=build/Pavo.dmg
+[ -d "$app" ] || { echo "build the app first: scripts/build.sh"; exit 1; }
+
+# dmgbuild writes the finder layout without needing finder, so it works in ci too
+venv="${TMPDIR:-/tmp}/pavo-dmgbuild"
+[ -x "$venv/bin/dmgbuild" ] || { python3 -m venv "$venv" && "$venv/bin/pip" install --quiet dmgbuild; }
+
+rm -f "$dmg"
+"$venv/bin/dmgbuild" -s apps/macos/dmg/settings.py -D app="$app" "Pavo" "$dmg"
+
+profile="${NOTARY_PROFILE:-pavo}"
+if xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1; then
+  echo "→ notarizing (a few minutes)"
+  xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait
+  xcrun stapler staple "$dmg"
+else
+  echo "  not notarized: no '$profile' notary profile in the keychain"
+fi
+echo "✓ $dmg ($(du -h "$dmg" | cut -f1))"
