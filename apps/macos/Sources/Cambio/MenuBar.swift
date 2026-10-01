@@ -1,20 +1,32 @@
 import AppKit
+import os
+
+private let log = Logger(subsystem: "com.giginotmario.cambio", category: "conversion")
 
 /// The whole app: a peacock in the menu bar. Drop files on it (or click it and choose some),
 /// pick what to turn them into, and the results land next to the originals.
-@MainActor
 final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
-    private enum Outcome {
+    private enum State {
+        case idle
+        case converting(Conversion)
         case done([URL])
         case failed(String)
     }
 
+    /// What a menu item hands back when it's picked.
+    private struct Pick {
+        let action: String
+        let urls: [URL]
+    }
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let engine = Engine()
-    private var job: Engine.Job?
-    private var outputs: [URL] = []
-    private var outcome: Outcome?
-    private var clearBadge: DispatchWorkItem?
+    private var state = State.idle
+    private var badgeReset: Task<Void, Never>?
+
+    private var isConverting: Bool {
+        if case .converting = state { true } else { false }
+    }
 
     override init() {
         super.init()
@@ -32,7 +44,7 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     // MARK: dropping files on the icon
 
     func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard job == nil, !fileURLs(in: sender).isEmpty else { return [] }
+        guard !isConverting, !fileURLs(in: sender).isEmpty else { return [] }
         item.button?.highlight(true)
         return .copy
     }
@@ -44,9 +56,9 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         item.button?.highlight(false)
         let urls = fileURLs(in: sender)
-        guard job == nil, !urls.isEmpty else { return false }
-        // let the drag finish before a menu takes over the mouse
-        DispatchQueue.main.async { self.offerActions(for: urls) }
+        guard !isConverting, !urls.isEmpty else { return false }
+        // runs after the drag has finished, so the menu can take over the mouse
+        Task { await offerActions(for: urls) }
         return true
     }
 
@@ -60,25 +72,23 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        if let job {
-            menu.addItem(label("converting \(job.name)… \(Int(job.progress * 100))%"))
+        switch state {
+        case .converting(let conversion):
+            menu.addItem(.label("converting \(conversion.name)… \(percent(conversion.progress))"))
             menu.addItem(entry("cancel", #selector(cancel)))
-        } else {
-            switch outcome {
-            case .done(let urls)?:
-                let name = urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files"
-                menu.addItem(entry("show \(name) in finder", #selector(reveal)))
-                menu.addItem(.separator())
-            case .failed(let message)?:
-                menu.addItem(label("couldn't do that: \(message.prefix(80))"))
-                menu.addItem(.separator())
-                outcome = nil
-                setBadge(nil)
-            case nil:
-                break
-            }
-            menu.addItem(label("drop a file on the peacock to convert it"))
-            menu.addItem(entry("choose files…", #selector(chooseFiles)))
+        case .done(let urls):
+            menu.addItem(entry("show \(urls.displayName) in finder", #selector(reveal)))
+            menu.addItem(.separator())
+            addStartItems(to: menu)
+        case .failed(let message):
+            menu.addItem(.label("couldn't do that: \(message.prefix(80))"))
+            menu.addItem(.separator())
+            addStartItems(to: menu)
+            // once it's been read, the error is done
+            state = .idle
+            setBadge(nil)
+        case .idle:
+            addStartItems(to: menu)
         }
 
         menu.addItem(.separator())
@@ -86,42 +96,48 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         show(menu)
     }
 
-    private func offerActions(for urls: [URL]) {
-        Task {
-            let actions = (try? await engine.actions(for: urls)) ?? []
-            let menu = NSMenu()
-            menu.autoenablesItems = false
-            menu.addItem(label(urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files"))
+    private func addStartItems(to menu: NSMenu) {
+        menu.addItem(.label("drop a file on the peacock to convert it"))
+        menu.addItem(entry("choose files…", #selector(chooseFiles)))
+    }
 
-            let converts = actions.filter { $0.group == "convert" }
-            let tools = actions.filter { $0.group != "convert" }
-            if !converts.isEmpty {
+    private func offerActions(for urls: [URL]) async {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(.label(urls.displayName))
+
+        do {
+            let actions = try await engine.actions(for: urls)
+            let conversions = actions.filter(\.isConversion)
+            let tools = actions.filter { !$0.isConversion }
+            if !conversions.isEmpty {
                 menu.addItem(.separator())
-                menu.addItem(label("convert to"))
-                converts.forEach { menu.addItem(actionEntry($0, urls)) }
+                menu.addItem(.label("convert to"))
+                for action in conversions {
+                    menu.addItem(entry(for: action, urls))
+                }
             }
             if !tools.isEmpty {
                 menu.addItem(.separator())
-                tools.forEach { menu.addItem(actionEntry($0, urls)) }
+                for action in tools {
+                    menu.addItem(entry(for: action, urls))
+                }
             }
             if actions.isEmpty {
-                menu.addItem(label("nothing to do with this yet"))
+                menu.addItem(.label("nothing to do with this yet"))
             }
-            show(menu)
+        } catch {
+            log.error("couldn't list actions: \(error.localizedDescription, privacy: .public)")
+            menu.addItem(.label("couldn't read \(urls.count == 1 ? "that file" : "those files")"))
         }
+        show(menu)
     }
 
-    /// Pops a menu down from the icon, the same way a click would.
+    /// Pops a menu down from the icon, exactly where a click would put it.
     private func show(_ menu: NSMenu) {
         item.menu = menu
         item.button?.performClick(nil)
         item.menu = nil
-    }
-
-    private func label(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
     }
 
     private func entry(_ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
@@ -130,102 +146,110 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         return item
     }
 
-    private final class Request {
-        let action: String
-        let urls: [URL]
-        init(action: String, urls: [URL]) {
-            self.action = action
-            self.urls = urls
-        }
-    }
-
-    private func actionEntry(_ action: Engine.Action, _ urls: [URL]) -> NSMenuItem {
+    private func entry(for action: Engine.Action, _ urls: [URL]) -> NSMenuItem {
         let item = entry(action.label, #selector(picked(_:)))
-        item.representedObject = Request(action: action.id, urls: urls)
+        item.representedObject = Pick(action: action.id, urls: urls)
         return item
     }
 
     // MARK: actions
 
     @objc private func picked(_ sender: NSMenuItem) {
-        guard let request = sender.representedObject as? Request, job == nil else { return }
-        outputs = []
-        outcome = nil
+        guard let pick = sender.representedObject as? Pick, !isConverting else { return }
+        let conversion: Conversion
         do {
-            job = try engine.run(request.action, on: request.urls) { [weak self] event in
-                self?.handle(event)
-            }
-            setBadge("0%")
+            conversion = try engine.convert(pick.urls, with: pick.action)
         } catch {
-            finish(error: "couldn't start the converter")
+            log.error("couldn't start the cli: \(error.localizedDescription, privacy: .public)")
+            finish(.failed("couldn't start the converter"))
+            return
+        }
+
+        state = .converting(conversion)
+        setBadge(percent(0))
+        Task {
+            do throws(Conversion.Failure) {
+                let outputs = try await conversion.run { fraction in setBadge(percent(fraction)) }
+                finish(outputs.isEmpty ? .idle : .done(outputs))
+            } catch .cancelled {
+                finish(.idle)
+            } catch .failed(let message) {
+                log.error("\(pick.action, privacy: .public) failed: \(message, privacy: .private)")
+                finish(.failed(message))
+            }
         }
     }
 
-    private func handle(_ event: Engine.Event) {
-        switch event {
-        case .progress(let fraction):
-            setBadge("\(Int(fraction * 100))%")
-        case .output(let url):
-            outputs.append(url)
-        case .finished(let error):
-            finish(error: error)
-        }
-    }
-
-    private func finish(error: String?) {
-        job = nil
-        if let error, error != "cancelled" {
-            outcome = .failed(error)
-            setBadge("!")
-        } else if !outputs.isEmpty {
-            outcome = .done(outputs)
-            setBadge("✓", clearAfter: 2)
-        } else {
-            setBadge(nil)
+    private func finish(_ next: State) {
+        state = next
+        switch next {
+        case .done: setBadge("✓", clearAfter: .seconds(2))
+        case .failed: setBadge("!")
+        case .idle, .converting: setBadge(nil)
         }
     }
 
     @objc private func cancel() {
-        job?.cancel()
+        if case .converting(let conversion) = state {
+            conversion.cancel()
+        }
     }
 
     @objc private func reveal() {
-        if case .done(let urls)? = outcome {
+        if case .done(let urls) = state {
             NSWorkspace.shared.activateFileViewerSelecting(urls)
         }
     }
 
     @objc private func chooseFiles() {
-        NSApp.activate(ignoringOtherApps: true)
+        if #available(macOS 14, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.prompt = "Choose"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        offerActions(for: panel.urls)
+        let urls = panel.urls
+        Task { await offerActions(for: urls) }
     }
 
     @objc private func quit() {
-        job?.cancel()
+        cancel()
         NSApp.terminate(nil)
     }
 
     // MARK: the little text next to the icon
 
-    private func setBadge(_ text: String?, clearAfter seconds: Double? = nil) {
-        clearBadge?.cancel()
+    private func percent(_ fraction: Double) -> String {
+        "\(Int(fraction * 100))%"
+    }
+
+    private func setBadge(_ text: String?, clearAfter delay: Duration? = nil) {
+        badgeReset?.cancel()
         guard let button = item.button else { return }
-        if let text {
-            button.title = " " + text
-            item.length = NSStatusItem.variableLength
-        } else {
-            button.title = ""
-            item.length = NSStatusItem.squareLength
+        button.title = text.map { " " + $0 } ?? ""
+        item.length = text == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
+
+        guard let delay else { return }
+        badgeReset = Task {
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return // a newer badge replaced this one
+            }
+            setBadge(nil)
         }
-        if let seconds {
-            let work = DispatchWorkItem { [weak self] in self?.setBadge(nil) }
-            clearBadge = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
-        }
+    }
+}
+
+private extension NSMenuItem {
+    /// A line of text in a menu that can't be clicked.
+    static func label(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
     }
 }

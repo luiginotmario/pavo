@@ -15,11 +15,12 @@ thanks for wanting to help. cambio stays useful by staying small, so here's the 
 
 ```
 ./scripts/build.sh        # builds build/Cambio.app
-cargo test                # runs the engine's tests
+cargo test                # the engine's tests
+swift test --package-path apps/macos   # the app's tests (after build.sh)
 ```
 
 - conversions live in `crates/cambio-core`. `actions_for` decides what shows up in the menu, `run` does the work.
-- the menu bar app is `apps/macos` (swift, no dependencies).
+- the menu bar app is `apps/macos`: swift 6, main-actor by default, no dependencies. swift code follows [write-swift](https://github.com/emilkowalski/skills/blob/main/skills/write-swift/SKILL.md).
 - every output goes next to the original and never overwrites anything — use `paths::output_for` and `Staged`.
 - keep it light. if a change adds a heavy dependency or something that runs in the background, say why in the pr.
 
