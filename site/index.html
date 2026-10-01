@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cambio</title>
+  <meta name="description" content="drop any file on your menu bar, get it back in the format you need. free, open source, 100% local.">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/caveat-700.woff2" as="font" type="font/woff2" crossorigin>
+  <style>
+    @font-face {
+      font-family: "Caveat";
+      src: url("fonts/caveat-500.woff2") format("woff2");
+      font-weight: 500;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Caveat";
+      src: url("fonts/caveat-700.woff2") format("woff2");
+      font-weight: 700;
+      font-display: swap;
+    }
+
+    :root {
+      --bg: #0c0c0d;
+      --ink: #f1efe8;
+      --muted: #8d8b84;
+      --faint: #2a2a2c;
+      --hand: "Caveat", "Bradley Hand", "Segoe Print", cursive;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+
+    /* nav */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 22px 0;
+    }
+    .wordmark {
+      font: 700 28px/1 var(--hand);
+      text-decoration: none;
+    }
+    nav .links { display: flex; gap: 20px; font-size: 14px; color: var(--muted); }
+    nav .links a { text-decoration: none; transition: color 150ms ease; }
+    @media (hover: hover) and (pointer: fine) {
+      nav .links a:hover { color: var(--ink); }
+    }
+
+    /* hero */
+    .hero {
+      text-align: center;
+      padding: 24px 0 72px;
+    }
+    .hero svg {
+      width: min(340px, 86vw);
+      height: auto;
+      display: block;
+      margin: 0 auto 8px;
+    }
+    h1 {
+      font: 700 clamp(64px, 12vw, 96px)/0.9 var(--hand);
+      margin: 0 0 18px;
+      letter-spacing: -0.01em;
+    }
+    .lede {
+      font-size: clamp(18px, 2.4vw, 21px);
+      margin: 0 auto 10px;
+      max-width: 30ch;
+      text-wrap: balance;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 32px;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 46px;
+      padding: 0 22px;
+      border-radius: 999px;
+      font: 600 15px/1 var(--sans);
+      text-decoration: none;
+      border: 1px solid var(--ink);
+      transition: transform 160ms var(--ease-out), background-color 150ms ease, color 150ms ease;
+      user-select: none;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn.primary { background: var(--ink); color: var(--bg); }
+    .btn.ghost { color: var(--ink); border-color: #3b3b3e; }
+    @media (hover: hover) and (pointer: fine) {
+      .btn.ghost:hover { border-color: var(--ink); }
+    }
+    .btn[aria-disabled="true"] {
+      background: transparent;
+      color: var(--muted);
+      border-color: #3b3b3e;
+      border-style: dashed;
+      pointer-events: none;
+    }
+    .btn svg { width: 16px; height: 16px; }
+    .os-note { color: var(--muted); font-size: 13px; margin-top: 14px; }
+
+    /* sections */
+    section { padding: 64px 0; border-top: 1px dashed var(--faint); }
+    h2 {
+      font: 700 clamp(36px, 6vw, 46px)/1 var(--hand);
+      margin: 0 0 8px;
+    }
+    .section-sub { color: var(--muted); margin: 0 0 32px; }
+
+    /* tabs */
+    .tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid #2f2f32;
+      border-radius: 999px;
+      margin-bottom: 36px;
+    }
+    .tab {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: var(--muted);
+      font: 600 14px/1 var(--sans);
+      padding: 10px 18px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: color 150ms ease, background-color 150ms ease, transform 160ms var(--ease-out);
+    }
+    .tab:active { transform: scale(0.97); }
+    .tab[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+    .tab .soon {
+      font-weight: 500;
+      font-size: 11px;
+      opacity: 0.7;
+      margin-left: 4px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 28px;
+      counter-reset: step;
+    }
+    .step svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .step h3 {
+      font: 700 30px/1.1 var(--hand);
+      margin: 14px 0 4px;
+    }
+    .step h3 span { color: var(--muted); margin-right: 6px; }
+    .step p { margin: 0; color: var(--muted); font-size: 15px; }
+    .step code {
+      font: 13px var(--mono);
+      color: var(--ink);
+      background: #1a1a1c;
+      padding: 1px 6px;
+      border-radius: 5px;
+    }
+    .soon-banner {
+      margin-top: 28px;
+      font: 500 22px/1.3 var(--hand);
+      color: var(--muted);
+    }
+    .soon-banner a { color: var(--ink); }
+
+    /* formats */
+    .formats { display: grid; gap: 0; }
+    .formats div {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px dashed var(--faint);
+    }
+    .formats dt { font: 700 26px/1.1 var(--hand); }
+    .formats dd { margin: 0; color: var(--muted); font: 14px/1.9 var(--mono); }
+
+    /* why */
+    .why {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+    }
+    .why h3 { font: 700 30px/1.1 var(--hand); margin: 0 0 8px; }
+    .why p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* fork */
+    pre {
+      margin: 0 0 18px;
+      padding: 18px 20px;
+      background: #141416;
+      border: 1px solid #232326;
+      border-radius: 12px;
+      overflow-x: auto;
+      font: 14px/1.7 var(--mono);
+    }
+    pre .p { color: var(--muted); user-select: none; }
+
+    footer {
+      padding: 48px 0 64px;
+      border-top: 1px dashed var(--faint);
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    footer .sig { font: 500 24px/1 var(--hand); color: var(--ink); }
+
+    @media (max-width: 760px) {
+      .steps, .why { grid-template-columns: 1fr; gap: 40px; }
+      .step svg { max-width: 360px; }
+      .formats div { grid-template-columns: 1fr; gap: 2px; }
+      section { padding: 52px 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav>
+      <a class="wordmark" href="#">cambio</a>
+      <div class="links">
+        <a href="#install">install</a>
+        <a href="https://github.com/luiginotmario/cambio">github ↗</a>
+      </div>
+    </nav>
+
+    <header class="hero">
+      <svg id="peacock" viewBox="0 0 320 236" role="img" aria-label="a hand-drawn peacock with its tail fanned out"></svg>
+      <h1>cambio</h1>
+      <p class="lede">drop any file on your menu bar. get it back in the format you need.</p>
+      <p class="sub">free · open source · runs 100% on your computer · no account, ever</p>
+      <div class="actions">
+        <a class="btn primary" id="hero-download" href="https://github.com/luiginotmario/cambio/releases/latest">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v8m-3.5-3.5L8 10l3.5-3.5M3 13.5h10"/></svg>
+          <span>download for mac</span>
+        </a>
+        <a class="btn ghost" href="https://github.com/luiginotmario/cambio">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>view the code</span>
+        </a>
+      </div>
+      <p class="os-note" id="os-note">windows &amp; linux are coming soon</p>
+    </header>
+
+    <section id="install">
+      <h2>three steps. that's it.</h2>
+      <p class="section-sub">no installer wizard, no account, no settings to figure out.</p>
+
+      <div class="tabs" role="tablist" aria-label="your operating system">
+        <button class="tab" role="tab" data-os="mac" aria-selected="true">mac</button>
+        <button class="tab" role="tab" data-os="windows" aria-selected="false">windows<span class="soon">soon</span></button>
+        <button class="tab" role="tab" data-os="linux" aria-selected="false">linux<span class="soon">soon</span></button>
+      </div>
+
+      <div class="steps" id="steps" role="tabpanel"></div>
+      <p class="soon-banner" id="soon-banner" hidden>not out yet — <a href="https://github.com/luiginotmario/cambio">star the repo</a> and you'll see when it ships.</p>
+    </section>
+
+    <section>
+      <h2>what it converts</h2>
+      <p class="section-sub">drop a file and you only see the formats that make sense for it.</p>
+      <dl class="formats">
+        <div><dt>images</dt><dd>jpg · png · webp · heic · avif · tiff · bmp · gif · svg → pdf</dd></div>
+        <div><dt>video</dt><dd>mp4 · mov · mkv · webm · avi · gif · pull out the audio</dd></div>
+        <div><dt>audio</dt><dd>mp3 · m4a · wav · flac · ogg · opus · aiff</dd></div>
+        <div><dt>pdfs</dt><dd>→ images · merge · split · rotate · compress</dd></div>
+        <div><dt>archives</dt><dd>zip · tar · gz · 7z · unpack rar</dd></div>
+        <div><dt>anything</dt><dd>compress · strip metadata</dd></div>
+      </dl>
+    </section>
+
+    <section>
+      <div class="why">
+        <div>
+          <h3>it's tiny</h3>
+          <p>a rust core with a native swift menu bar app. no electron, no hidden browser, nothing churning in the background. built to sit quietly on a base macbook air.</p>
+        </div>
+        <div>
+          <h3>it's private</h3>
+          <p>your files never leave your computer. there's no server to send them to. don't take my word for it — read the code.</p>
+        </div>
+        <div>
+          <h3>it's yours</h3>
+          <p>no account, no tracking, no paywall. missing a format? add it, open a pr, or fork it and make it your own.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="fork">
+      <h2>make it yours</h2>
+      <p class="section-sub">the whole thing is on github. clone it, change it, ship your own version.</p>
+<pre><span class="p">$ </span>git clone https://github.com/luiginotmario/cambio
+<span class="p">$ </span>cd cambio</pre>
+      <p class="section-sub">if you make it better, open a pr and i'll ship it in the next release.</p>
+    </section>
+
+    <footer>
+      <span class="sig">made by luigi</span>
+      <span>open source · <a href="https://github.com/luiginotmario/cambio">github.com/luiginotmario/cambio</a></span>
+    </footer>
+  </div>
+
+  <script src="vendor/rough.js"></script>
+  <script src="sketches.js"></script>
+</body>
+</html>

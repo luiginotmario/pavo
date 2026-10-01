@@ -1,0 +1,7 @@
+.DS_Store
+/target
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+.claude/
