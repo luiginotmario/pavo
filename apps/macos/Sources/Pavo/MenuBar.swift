@@ -3,12 +3,25 @@ import Observation
 
 /// The peacock in the menu bar. Click it, or drop files on it, and the panel opens underneath.
 /// While something converts, the progress sits next to the icon.
+/// The icon can be hidden: right-click and ⇧-drag keep working, and opening pavo again brings it back.
 final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let converter = Converter()
     private let wheel: Wheel
-    private lazy var panel = MenuPanel(converter: converter) { self.chooseFiles() }
+    private lazy var panel = MenuPanel(
+        converter: converter,
+        chooseFiles: { self.chooseFiles() },
+        hideIcon: { self.hideIcon() },
+        closed: { self.installIfIdle() }
+    )
+    private let updater = Updater()
     private var badgeReset: Task<Void, Never>?
+    private var iconHidden = UserDefaults.standard.bool(forKey: "hideIcon") {
+        didSet {
+            UserDefaults.standard.set(iconHidden, forKey: "hideIcon")
+            refreshIcon()
+        }
+    }
 
     override init() {
         wheel = Wheel(converter: converter)
@@ -23,6 +36,9 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         button.window?.registerForDraggedTypes([.fileURL])
         button.window?.delegate = self
         followConverter()
+        updater.tidyUp()
+        wheel.used = { self.checkForUpdate() }
+        wheel.closed = { self.installIfIdle() }
 
         // right-click files → Convert with Pavo (the service is declared in Info.plist)
         NSApp.servicesProvider = self
@@ -72,7 +88,9 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     }
 
     /// Drops the panel down from the peacock (when pavo is opened, or opened again).
+    /// Opening pavo again is also how a hidden icon comes back.
     func showPanel() {
+        iconHidden = false
         // the status item needs a moment to land in the menu bar on a fresh launch
         Task {
             try? await Task.sleep(for: .milliseconds(150))
@@ -81,8 +99,31 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     }
 
     private func openPanel() {
+        checkForUpdate()
         guard let button = item.button, let window = button.window else { return }
         panel.open(below: window.convertToScreen(button.convert(button.bounds, to: nil)))
+    }
+
+    private func hideIcon() {
+        panel.close()
+        iconHidden = true
+    }
+
+    /// Hidden by choice, but shown while something converts so the progress is visible.
+    private func refreshIcon() {
+        item.isVisible = !iconHidden || converter.isWorking || item.button?.title.isEmpty == false
+    }
+
+    // MARK: updates: only ever checked when pavo is being used, never on a timer
+
+    private func checkForUpdate() {
+        updater.checkIfDue { self.installIfIdle() }
+    }
+
+    /// Swaps in a downloaded update, but only once nothing is open or converting.
+    private func installIfIdle() {
+        guard updater.staged != nil, !panel.isOpen, !wheel.isOpen, !converter.isWorking else { return }
+        updater.install()
     }
 
     private func chooseFiles() {
@@ -121,6 +162,10 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         case .empty, .loading, .choosing:
             setBadge(nil)
         }
+        refreshIcon()
+        if !converter.isWorking {
+            Task { installIfIdle() } // a conversion just finished: a good moment
+        }
     }
 
     private func setBadge(_ text: String?, clearAfter delay: Duration? = nil) {
@@ -128,6 +173,7 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         guard let button = item.button else { return }
         button.title = text.map { " " + $0 } ?? ""
         item.length = text == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        refreshIcon()
         guard text != nil, let delay, delay > .zero else { return }
         badgeReset = Task {
             do {

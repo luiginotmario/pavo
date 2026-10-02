@@ -6,6 +6,8 @@ a tiny, open-source menu bar app that converts files. drop a file on the peacock
 - 100% local. your files never leave your mac.
 - no account, no settings, no tracking.
 - light: ~11 MB of memory and 0% cpu while it waits. the conversion engine only runs while it's converting.
+- updates itself quietly. it only looks for a new version when you use it (never in the background), checks it's signed by pavo, and swaps it in when you're done.
+- the menu bar icon is optional: hide it and right-click → convert with pavo and ⇧-drag keep working. open pavo again to bring it back.
 
 ## what it does
 

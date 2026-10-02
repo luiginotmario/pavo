@@ -101,3 +101,26 @@ struct WatermarkBoxTests {
         #expect(box.maxX == 1 && box.maxY == 1)
     }
 }
+
+struct UpdaterTests {
+    @Test(arguments: [
+        ("v0.1.6", "0.1.5", true),
+        ("0.1.10", "0.1.9", true),
+        ("v0.2.0", "0.1.99", true),
+        ("v0.1.5", "0.1.5", false),
+        ("v0.1.4", "0.1.5", false),
+        ("v1.0", "0.9.9", true),
+    ])
+    func `only installs versions that are actually newer`(candidate: String, current: String, newer: Bool) {
+        #expect(Updater.isNewer(candidate, than: current) == newer)
+    }
+
+    @Test func `only trusts apps signed with pavo's developer id`() throws {
+        let ours = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../../../../build/Pavo.app").standardized
+        try #require(FileManager.default.fileExists(atPath: ours.path), "run scripts/build.sh first")
+        let developerID = Updater.isSignedByUs(ours)
+        // a local build without the developer id certificate is only ad-hoc signed
+        #expect(developerID == ProcessInfo.processInfo.environment["PAVO_SIGNED"].map { $0 == "1" } ?? developerID)
+        #expect(!Updater.isSignedByUs(URL(fileURLWithPath: "/System/Applications/Calculator.app")), "apple's own apps aren't ours")
+    }
+}

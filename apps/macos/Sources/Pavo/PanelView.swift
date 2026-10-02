@@ -5,6 +5,7 @@ import SwiftUI
 struct PanelView: View {
     let converter: Converter
     let chooseFiles: () -> Void
+    let hideIcon: () -> Void
     let close: () -> Void
     let quit: () -> Void
     let resized: (CGSize) -> Void
@@ -26,7 +27,7 @@ struct PanelView: View {
     @ViewBuilder private var content: some View {
         switch converter.phase {
         case .empty:
-            DropHere(converter: converter, chooseFiles: chooseFiles, quit: quit)
+            DropHere(converter: converter, chooseFiles: chooseFiles, hideIcon: hideIcon, quit: quit)
         case .loading(let urls):
             Header(urls.displayName)
             Text("reading…").font(Ink.font(13, bold: false)).foregroundStyle(Ink.faded)
@@ -60,6 +61,7 @@ private struct Header: View {
 private struct DropHere: View {
     let converter: Converter
     let chooseFiles: () -> Void
+    let hideIcon: () -> Void
     let quit: () -> Void
     @State private var targeted = false
 

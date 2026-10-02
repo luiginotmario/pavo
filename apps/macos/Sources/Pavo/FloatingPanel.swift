@@ -34,15 +34,19 @@ extension NSPanel {
 final class MenuPanel {
     private let converter: Converter
     private let chooseFiles: () -> Void
+    private let hideIcon: () -> Void
+    private let closed: () -> Void
     private var panel: KeyPanel?
     private var anchor = NSRect.zero
     private var monitors: [Any] = []
 
     var isOpen: Bool { panel != nil }
 
-    init(converter: Converter, chooseFiles: @escaping () -> Void) {
+    init(converter: Converter, chooseFiles: @escaping () -> Void, hideIcon: @escaping () -> Void, closed: @escaping () -> Void) {
         self.converter = converter
         self.chooseFiles = chooseFiles
+        self.hideIcon = hideIcon
+        self.closed = closed
     }
 
     /// Opens under `anchor` (the status item's frame, in screen coordinates).
@@ -56,6 +60,7 @@ final class MenuPanel {
         let view = PanelView(
             converter: converter,
             chooseFiles: chooseFiles,
+            hideIcon: hideIcon,
             close: { self.close() },
             quit: { NSApp.terminate(nil) },
             resized: { self.place(size: $0) }
@@ -99,6 +104,7 @@ final class MenuPanel {
         panel = nil
         if case .done = converter.phase { converter.reset() }
         if case .failed = converter.phase { converter.reset() }
+        closed()
     }
 
     private func place(_ panel: NSPanel) {
