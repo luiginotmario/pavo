@@ -9,6 +9,8 @@ mod cancel;
 mod docs;
 mod ffmpeg;
 mod images;
+#[cfg(target_os = "macos")]
+mod iwork;
 mod paths;
 mod pdf;
 #[cfg(target_os = "macos")]
@@ -30,6 +32,8 @@ pub enum Kind {
     Document,
     Text,
     Subtitle,
+    /// Pages, Numbers and Keynote
+    IWork,
     Archive,
     Folder,
     Other,
@@ -109,10 +113,15 @@ const TEXT_TARGETS: &[&str] = &["pdf", "png", "jpg", "docx", "rtf", "html", "srt
 const SUBTITLE_TARGETS: &[&str] = &["srt", "vtt", "txt"];
 
 pub fn kind_of(path: &Path) -> Kind {
+    let ext = paths::ext(path);
+    // older Pages, Numbers and Keynote files are folders that look like files
+    if matches!(ext.as_str(), "pages" | "numbers" | "key") {
+        return Kind::IWork;
+    }
     if path.is_dir() {
         return Kind::Folder;
     }
-    match paths::ext(path).as_str() {
+    match ext.as_str() {
         "jpg" | "jpeg" | "png" | "webp" | "heic" | "heif" | "avif" | "tif" | "tiff" | "bmp" | "gif" => {
             Kind::Image
         }
@@ -241,6 +250,15 @@ pub fn actions_for(inputs: &[PathBuf]) -> Vec<Action> {
         Kind::Document if cfg!(target_os = "macos") => convert_to(&mut add, docs::TARGETS),
         Kind::Text if cfg!(target_os = "macos") => convert_to(&mut add, TEXT_TARGETS),
         Kind::Subtitle => convert_to(&mut add, SUBTITLE_TARGETS),
+        #[cfg(target_os = "macos")]
+        Kind::IWork => convert_to(
+            &mut add,
+            match own.as_str() {
+                "pages" => iwork::PAGES,
+                "numbers" => iwork::NUMBERS,
+                _ => iwork::KEYNOTE,
+            },
+        ),
         Kind::Archive => add(Group::Tool, "unpack", "unpack"),
         _ => {}
     }
@@ -385,6 +403,8 @@ fn run_one(action: &str, input: &Path, on: &mut dyn FnMut(Event)) -> Result<Vec<
                     _ => docs::convert(input, target),
                 },
                 Subtitle => docs::convert_subtitles(input, target),
+                #[cfg(target_os = "macos")]
+                IWork => iwork::export(input, target),
                 _ => bail!("can't turn {} into .{target}", paths::name(input)),
             })
         }

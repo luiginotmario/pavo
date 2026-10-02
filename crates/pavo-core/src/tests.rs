@@ -241,3 +241,14 @@ fn compress_levels_get_smaller() {
     let (light, balanced, smallest) = (size("compress:light"), size("compress"), size("compress:smallest"));
     assert!(light > balanced && balanced > smallest, "{light} > {balanced} > {smallest}");
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn offers_exports_for_pages_numbers_and_keynote() {
+    let pages = ids(&["letter.pages".into()]);
+    for id in ["to:pdf", "to:docx", "to:epub", "to:txt"] {
+        assert!(pages.contains(&id.to_string()), "pages should offer {id}");
+    }
+    assert!(ids(&["budget.numbers".into()]).contains(&"to:xlsx".to_string()));
+    assert!(ids(&["talk.key".into()]).contains(&"to:pptx".to_string()));
+}

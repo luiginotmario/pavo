@@ -24,6 +24,8 @@
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Pavo asks Pages, Numbers and Keynote to export your documents, exactly like File → Export.</string>
     <key>NSServices</key>
     <array>
         <dict>

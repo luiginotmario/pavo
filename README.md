@@ -22,6 +22,9 @@ three ways in:
 | video | mp4 · mov · mkv · webm · avi · wmv · gif | compress · trim · split · join · crop · rotate · mute · pull out the audio · save a frame · strip metadata |
 | audio | mp3 · m4a · wav · flac · ogg · opus · aiff · wma | compress · trim · split · join · strip metadata |
 | pdf | png · jpg (every page, 300 dpi) · txt · docx | compress · merge · split into pages · rotate |
+| pages | pdf · docx · epub · txt | |
+| numbers | pdf · xlsx · csv | |
+| keynote | pdf · pptx | |
 | word, rtf, odt, html | docx · doc · rtf · odt · html · txt · pdf | |
 | text | pdf · png · jpg · docx · rtf · html · srt · vtt | |
 | subtitles | srt · vtt · txt | |
@@ -30,7 +33,7 @@ three ways in:
 
 nothing is ever overwritten. if `clip.mp4` already exists you get `clip 2.mp4`.
 
-video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from source by `scripts/build-ffmpeg.sh`, bundled inside the app) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine, and backgrounds are removed by apple's vision framework (the same on-device model photos uses), running on the neural engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`). everything else is plain rust.
+video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from source by `scripts/build-ffmpeg.sh`, bundled inside the app) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine, and backgrounds are removed by apple's vision framework (the same on-device model photos uses), running on the neural engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`), and pages, numbers and keynote files are exported by those apps themselves. everything else is plain rust.
 
 ## download
 

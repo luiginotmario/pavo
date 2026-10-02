@@ -47,8 +47,10 @@ sign=(codesign --force --options runtime --timestamp --sign "${identity:-}")
 if [ -z "$identity" ]; then
   sign=(codesign --force --sign -)
 fi
-"${sign[@]}" "$app/Contents/Helpers/"*
-"${sign[@]}" "$app"
+entitlements=apps/macos/Pavo.entitlements # apple events, for exporting pages/numbers/keynote files
+"${sign[@]}" "$app/Contents/Helpers/ffmpeg" "$app/Contents/Helpers/pavo-vision"
+"${sign[@]}" --entitlements "$entitlements" "$app/Contents/Helpers/pavo"
+"${sign[@]}" --entitlements "$entitlements" "$app"
 echo "  signed: ${identity:-ad-hoc (local only)}"
 
 echo "✓ $app"
