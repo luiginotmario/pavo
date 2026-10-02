@@ -20,7 +20,7 @@ final class WheelModel {
     var visible: [Engine.Action] {
         let wanted = showingTools ? actions.filter { $0.group != "convert" } : actions.filter { $0.group == "convert" }
         // trim needs times typed in, which the wheel can't do; the panel handles it
-        return Array(wanted.filter { $0.id != "trim" }.prefix(14))
+        return Array(wanted.filter { $0.id != "trim" }.prefix(13))
     }
 
     var hint: String {
@@ -145,11 +145,11 @@ struct WheelView: View {
 
     var body: some View {
         let actions = model.visible
-        let bubble: CGFloat = actions.count > 8 ? 74 : 84
+        let spots = Self.halfCircle(count: actions.count)
         ZStack {
             hub
             ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
-                Bubble(action: action, diameter: bubble, hovered: model.hovered == action.id) {
+                Bubble(action: action, diameter: Self.bubble, hovered: model.hovered == action.id) {
                     pick(action.id)
                 } onHover: { inside in
                     if inside {
@@ -158,7 +158,7 @@ struct WheelView: View {
                         model.hovered = nil
                     }
                 }
-                .offset(offset(index, of: actions.count, bubble: bubble))
+                .offset(spots[index])
             }
         }
         .frame(width: size, height: size)
@@ -168,12 +168,12 @@ struct WheelView: View {
     /// The middle: what's being converted. In click mode it flips between formats and tools.
     private var hub: some View {
         VStack(spacing: 2) {
-            Text(model.urls.displayName).font(Ink.font(14)).lineLimit(1).truncationMode(.middle)
-            Text(model.hint).font(Ink.font(11, bold: false)).foregroundStyle(Ink.faded).multilineTextAlignment(.center)
+            Text(model.urls.displayName).font(Ink.font(12)).lineLimit(1).truncationMode(.middle)
+            Text(model.hint).font(Ink.font(10, bold: false)).foregroundStyle(Ink.faded).multilineTextAlignment(.center)
         }
         .foregroundStyle(Ink.pencil)
-        .padding(.horizontal, 16)
-        .frame(width: 146, height: 146)
+        .padding(.horizontal, 12)
+        .frame(width: Self.hub, height: Self.hub)
         .background(Ink.paper, in: Circle())
         .overlay { SketchEllipse(seed: "hub").stroke(Ink.pencil, lineWidth: 1.3) }
         .contentShape(Circle())
@@ -184,11 +184,28 @@ struct WheelView: View {
         }
     }
 
-    /// Spread around the hub like the peacock's tail, starting at the top.
-    private func offset(_ index: Int, of count: Int, bubble: CGFloat) -> CGSize {
-        let angle = -Double.pi / 2 + Double(index) / Double(max(count, 1)) * 2 * .pi
-        let radius = size / 2 - bubble / 2 - 6
-        return CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
+    static let bubble: CGFloat = 64
+    static let hub: CGFloat = 104
+
+    /// Bubbles fan out in a half circle to the left of the pointer, top to bottom, so every
+    /// option is a short swipe away. Up to 5 fit in one tight row; more spill into a second row.
+    static func halfCircle(count: Int) -> [CGSize] {
+        let gap = bubble + 6 // centre-to-centre distance so neighbours don't touch
+        let inner = hub / 2 + bubble / 2 + 10
+        func row(_ n: Int, minimumRadius: CGFloat) -> [CGSize] {
+            guard n > 0 else { return [] }
+            guard n > 1 else { return [CGSize(width: -minimumRadius, height: 0)] }
+            // the smallest radius that still keeps n bubbles apart across 180°
+            let radius = max(minimumRadius, gap / 2 / sin(.pi / 2 / CGFloat(n - 1)))
+            return (0..<n).map { i in
+                let angle = -CGFloat.pi / 2 - CGFloat(i) / CGFloat(n - 1) * .pi // top → left → bottom
+                return CGSize(width: cos(angle) * radius, height: sin(angle) * radius)
+            }
+        }
+        if count <= 8 {
+            return row(count, minimumRadius: inner)
+        }
+        return row(5, minimumRadius: inner) + row(count - 5, minimumRadius: inner + bubble + 8)
     }
 }
 
@@ -201,7 +218,7 @@ private struct Bubble: View {
 
     var body: some View {
         Text(action.label)
-            .font(Ink.font(action.label.count > 10 ? 11 : 13))
+            .font(Ink.font(action.label.count > 10 ? 10 : 12))
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.6)

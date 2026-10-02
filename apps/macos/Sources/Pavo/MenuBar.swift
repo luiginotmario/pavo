@@ -71,6 +71,15 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         }
     }
 
+    /// Drops the panel down from the peacock (when pavo is opened, or opened again).
+    func showPanel() {
+        // the status item needs a moment to land in the menu bar on a fresh launch
+        Task {
+            try? await Task.sleep(for: .milliseconds(150))
+            openPanel()
+        }
+    }
+
     private func openPanel() {
         guard let button = item.button, let window = button.window else { return }
         panel.open(below: window.convertToScreen(button.convert(button.bounds, to: nil)))

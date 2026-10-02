@@ -65,6 +65,7 @@ private struct DropHere: View {
     var body: some View {
         VStack(spacing: 6) {
             Peacock().frame(height: 96)
+            Text("pavo lives in your menu bar").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
             Text("drop a file here").font(Ink.font(20))
             Text("or on the peacock in your menu bar").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
         }
@@ -76,6 +77,16 @@ private struct DropHere: View {
             Task { await converter.load(urls) }
             return true
         } isTargeted: { targeted = $0 }
+
+        if Bundle.main.bundlePath.hasPrefix("/Volumes/") {
+            Text("you're running pavo from the disk image. drag it into applications first, then open it from there.")
+                .font(Ink.font(12))
+                .foregroundStyle(Ink.pencil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .sketchBox("from-dmg")
+        }
 
         HStack {
             Button("choose files…", action: chooseFiles).buttonStyle(SketchButtonStyle(seed: "choose"))

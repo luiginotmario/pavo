@@ -20,6 +20,8 @@ extension NSPanel {
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
+        // panels hide when their app isn't frontmost by default, and a menu bar app rarely is
+        panel.hidesOnDeactivate = false
         let host = NSHostingView(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
         panel.contentView = host

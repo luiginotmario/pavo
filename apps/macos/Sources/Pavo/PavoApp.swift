@@ -5,6 +5,8 @@ import AppKit
 final class PavoApp: NSObject, NSApplicationDelegate {
     /// NSApplication only holds its delegate weakly, so the app keeps the strong reference.
     private static let shared = PavoApp()
+    /// Sent between copies of pavo so a second launch shows the first one's panel instead.
+    private static let showPanel = Notification.Name("com.giginotmario.pavo.show-panel")
 
     private var menuBar: MenuBar?
 
@@ -16,6 +18,28 @@ final class PavoApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        menuBar = MenuBar()
+        // only one peacock: if pavo is already running (say, one copy in Applications and one
+        // opened from the disk image), hand over to it and bow out
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        if !others.isEmpty {
+            DistributedNotificationCenter.default().postNotificationName(Self.showPanel, object: nil, deliverImmediately: true)
+            NSApp.terminate(nil)
+            return
+        }
+
+        let menuBar = MenuBar()
+        self.menuBar = menuBar
+        DistributedNotificationCenter.default().addObserver(forName: Self.showPanel, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { menuBar.showPanel() }
+        }
+        // there's no window, so show where pavo lives the moment it's opened
+        menuBar.showPanel()
+    }
+
+    /// Opening pavo again while it's running (Finder, Spotlight, the Dock) shows the panel.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        menuBar?.showPanel()
+        return false
     }
 }
