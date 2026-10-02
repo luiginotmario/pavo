@@ -202,3 +202,21 @@ fn gzips_and_unpacks() {
     let back = run("unpack", &[gz], &mut quiet()).unwrap().remove(0);
     assert_eq!(fs::read_to_string(back).unwrap(), "hello");
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn removes_backgrounds_when_the_helper_is_there() {
+    // set PAVO_VISION to apps/macos/.build/release/PavoVision to run this
+    if std::env::var_os("PAVO_VISION").is_none() {
+        return;
+    }
+    let dir = TempDir::new("cutout");
+    let parrot = dir.0.join("parrot.heic");
+    fs::copy("/Library/User Pictures/Animals/Parrot.heic", &parrot).unwrap();
+    let png = run("cutout", &[parrot.clone()], &mut quiet()).unwrap().remove(0);
+    assert_eq!(png.file_name().unwrap(), "parrot (no background).png");
+    let img = image::open(&png).unwrap().to_rgba8();
+    assert_eq!(img.get_pixel(img.width() - 1, img.height() - 1).0[3], 0, "the corner should be see-through");
+    let jpg = run("cutout:white", &[parrot], &mut quiet()).unwrap().remove(0);
+    assert_eq!(jpg.file_name().unwrap(), "parrot (white background).jpg");
+}

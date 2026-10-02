@@ -17,7 +17,7 @@ three ways in:
 
 | drop a… | convert to | edit & tools |
 |---|---|---|
-| photo | jpg · png · webp · heic · avif · tiff · bmp · gif · pdf | compress · crop · rotate · half size · strip metadata |
+| photo | jpg · png · webp · heic · avif · tiff · bmp · gif · pdf | remove background · white background · compress · crop · rotate · half size · strip metadata |
 | svg | png · jpg · webp · pdf | |
 | video | mp4 · mov · mkv · webm · avi · wmv · gif | compress · trim · split · join · crop · rotate · mute · pull out the audio · save a frame · strip metadata |
 | audio | mp3 · m4a · wav · flac · ogg · opus · aiff · wma | compress · trim · split · join · strip metadata |
@@ -30,7 +30,7 @@ three ways in:
 
 nothing is ever overwritten. if `clip.mp4` already exists you get `clip 2.mp4`.
 
-video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from source by `scripts/build-ffmpeg.sh`, bundled inside the app) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`). everything else is plain rust.
+video goes through [ffmpeg](https://ffmpeg.org) (an lgpl build compiled from source by `scripts/build-ffmpeg.sh`, bundled inside the app) using your mac's hardware encoders, so it's fast and doesn't cook your battery. pdfs are drawn by macos's own pdf engine, and backgrounds are removed by apple's vision framework (the same on-device model photos uses), running on the neural engine. heic, avif, word documents and rar files go through tools that ship with macos (`sips`, `textutil`, `bsdtar`). everything else is plain rust.
 
 ## download
 

@@ -152,6 +152,10 @@ pub fn actions_for(inputs: &[PathBuf]) -> Vec<Action> {
             if matches!(own.as_str(), "jpg" | "png" | "webp" | "heic" | "avif") {
                 add(Group::Edit, "compress", "compress");
             }
+            if own != "gif" && cfg!(target_os = "macos") {
+                add(Group::Edit, "cutout", "remove background");
+                add(Group::Edit, "cutout:white", "white background");
+            }
             if own != "gif" {
                 add(Group::Edit, "crop:square", "crop square");
                 add(Group::Edit, "crop:16x9", "crop 16:9");
@@ -309,6 +313,8 @@ fn run_one(action: &str, input: &Path, on: &mut dyn FnMut(Event)) -> Result<Vec<
         ("rotate", Image) => one(images::rotate(input)),
         ("rotate", Video) => one(ffmpeg::rotate(input, on)),
         ("shrink", Image) => one(images::shrink(input)),
+        ("cutout", Image) => one(images::cut_out(input, false)),
+        ("cutout:white", Image) => one(images::cut_out(input, true)),
         ("mute", Video) => one(ffmpeg::mute(input, on)),
         ("frame", Video) => one(ffmpeg::frame(input, on)),
         ("strip-metadata", Video | Audio) => one(ffmpeg::strip_metadata(input, on)),

@@ -118,6 +118,36 @@ pub fn convert(input: &Path, ext: &str) -> Result<PathBuf> {
     staged.commit()
 }
 
+/// The subject of the photo cut out by Apple's Vision framework (the model behind "lift subject"
+/// in Photos), on transparency or on white. Runs on the Neural Engine; pavo-vision exits when done.
+pub fn cut_out(input: &Path, white: bool) -> Result<PathBuf> {
+    let helper = vision_helper()?;
+    let (mode, ext, label) = if white {
+        ("white-background", "jpg", " (white background)")
+    } else {
+        ("remove-background", "png", " (no background)")
+    };
+    let staged = Staged::new(paths::output_for(input, ext, label));
+    let out = Command::new(&helper).arg(mode).arg(input).arg(staged.path()).output()?;
+    if !out.status.success() {
+        let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        bail!("{}", if why.is_empty() { format!("couldn't cut out {}", paths::name(input)) } else { why });
+    }
+    staged.commit()
+}
+
+/// Ships next to the pavo binary inside the app (Contents/Helpers/pavo-vision).
+fn vision_helper() -> Result<PathBuf> {
+    if let Some(path) = std::env::var_os("PAVO_VISION") {
+        return Ok(path.into());
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("pavo-vision")))
+        .filter(|p| p.is_file())
+        .context("background removal needs pavo-vision, which comes with the mac app")
+}
+
 /// Cuts the biggest `w`:`h` area out of the middle of the picture.
 pub fn crop(input: &Path, w: u32, h: u32) -> Result<PathBuf> {
     let ext = paths::ext(input);

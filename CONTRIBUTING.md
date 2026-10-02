@@ -15,7 +15,7 @@ thanks for wanting to help. pavo stays useful by staying small, so here's the de
 
 ```
 ./scripts/build.sh        # builds build/Pavo.app
-cargo test                # the engine's tests
+cargo test                # the engine's tests (PAVO_VISION=apps/macos/.build/release/PavoVision for background removal)
 swift test --package-path apps/macos   # the app's tests (after build.sh)
 ```
 

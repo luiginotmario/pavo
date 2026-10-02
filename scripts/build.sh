@@ -17,6 +17,7 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/Resources"
 cp "$bin/Pavo" "$app/Contents/MacOS/Pavo"
 cp target/release/pavo "$app/Contents/Helpers/pavo"
+cp "$bin/PavoVision" "$app/Contents/Helpers/pavo-vision"
 sed "s/__VERSION__/$version/g" apps/macos/Info.plist > "$app/Contents/Info.plist"
 
 echo "→ icon"

@@ -33,8 +33,7 @@ final class PavoApp: NSObject, NSApplicationDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Self.showPanel, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { menuBar.showPanel() }
         }
-        // there's no window, so show where pavo lives the moment it's opened
-        menuBar.showPanel()
+        // nothing else is built until it's needed: the panel only exists while it's open
     }
 
     /// Opening pavo again while it's running (Finder, Spotlight, the Dock) shows the panel.
