@@ -46,11 +46,6 @@ final class Wheel {
     private var panel: FloatPanel?
     private var watchers: [Any] = []
     private var dismissal: Any?
-    /// Called whenever the wheel opens: a moment pavo is in use, so a good time to look for updates.
-    var used: () -> Void = {}
-    /// Called whenever the wheel goes away.
-    var closed: () -> Void = {}
-
     var isOpen: Bool { panel != nil }
     /// The drag pasteboard's change count when we last looked, so each drag is only picked up once.
     private var seenDrag = NSPasteboard(name: .drag).changeCount
@@ -109,7 +104,6 @@ final class Wheel {
 
     private func open(for urls: [URL], mode: WheelModel.Mode, tools: Bool) {
         close()
-        used()
         model.mode = mode
         model.urls = urls
         model.actions = []
@@ -140,12 +134,8 @@ final class Wheel {
             NSEvent.removeMonitor(dismissal)
         }
         dismissal = nil
-        let wasOpen = panel != nil
         panel?.orderOut(nil)
         panel = nil
-        if wasOpen {
-            closed()
-        }
     }
 }
 

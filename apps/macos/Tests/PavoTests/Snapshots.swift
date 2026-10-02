@@ -43,7 +43,7 @@ struct Snapshots {
     }
 
     private func panel(_ converter: Converter) -> some View {
-        PanelView(converter: converter, chooseFiles: {}, hideIcon: {}, close: {}, quit: {}, resized: { _ in })
+        PanelView(converter: converter, chooseFiles: {}, close: {}, quit: {}, resized: { _ in })
     }
 
     private func save(_ view: some View, _ name: String) throws {

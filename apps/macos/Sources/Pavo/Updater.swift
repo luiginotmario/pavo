@@ -6,7 +6,7 @@ private let log = Logger(subsystem: "com.giginotmario.pavo", category: "update")
 
 /// Keeps pavo up to date without asking and without running in the background.
 ///
-/// Nothing happens on a timer: when the panel opens (at most every 12 hours) pavo asks GitHub for
+/// Nothing happens on a timer: when the peacock is clicked (at most every 12 hours) pavo asks GitHub for
 /// the latest release. A newer one is downloaded, checked to be signed by pavo's own developer ID,
 /// and staged next to the app. Once the panel is closed and nothing is converting, the two are
 /// swapped with renames and pavo reopens. Any failure leaves the current version untouched.
@@ -35,7 +35,7 @@ final class Updater {
         !Bundle.main.isTemporaryCopy && FileManager.default.isWritableFile(atPath: folder.path)
     }
 
-    /// Called when the panel opens. Does nothing unless it's been a while since the last look.
+    /// Called when the peacock is clicked. Does nothing unless it's been a while since the last look.
     func checkIfDue(onReady: @escaping () -> Void) {
         guard !checking, staged == nil, canUpdateInPlace else { return }
         let last = UserDefaults.standard.double(forKey: Self.lastCheckKey)
@@ -129,9 +129,20 @@ final class Updater {
 
         let mount = work.appending(path: "mount")
         try await Self.run("/usr/bin/hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path, dmg.path])
-        defer { Task { try? await Self.run("/usr/bin/hdiutil", ["detach", "-quiet", mount.path]) } }
+        let staged: Result<URL, Error>
+        do {
+            staged = .success(try await stage(mount.appending(path: "Pavo.app"), newerThan: current))
+        } catch {
+            staged = .failure(error)
+        }
+        try? await Self.run("/usr/bin/hdiutil", ["detach", "-quiet", mount.path])
+        let app = try staged.get()
+        log.notice("staged \(release.tag_name, privacy: .public)")
+        return app
+    }
 
-        let newApp = mount.appending(path: "Pavo.app")
+    /// Checks the new app is pavo's and newer, then copies it next to the current one.
+    private func stage(_ newApp: URL, newerThan current: String) async throws -> URL {
         guard Self.isSignedByUs(newApp) else { throw Problem.unsigned }
         let newVersion = Bundle(url: newApp)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         guard newVersion.map({ Self.isNewer($0, than: current) }) == true else { throw Problem.wrongVersion }
@@ -143,7 +154,6 @@ final class Updater {
             try? FileManager.default.removeItem(at: staged)
             throw Problem.unsigned
         }
-        log.notice("staged \(release.tag_name, privacy: .public)")
         return staged
     }
 
