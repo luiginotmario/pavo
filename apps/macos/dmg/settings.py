@@ -1,7 +1,7 @@
 # dmgbuild settings for Pavo.dmg. Icon positions match scripts/dmg-background.swift.
 app = defines.get("app", "build/Pavo.app")  # noqa: F821 (dmgbuild provides `defines`)
 
-format = "UDZO"
+format = "ULMO"  # lzma: the smallest download, opens on any mac pavo runs on
 files = [app]
 symlinks = {"Applications": "/Applications"}
 hide_extensions = ["Pavo.app"]

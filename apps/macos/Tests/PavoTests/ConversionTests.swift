@@ -73,3 +73,15 @@ struct EndToEndTests {
         }
     }
 }
+
+struct InstallLocationTests {
+    @Test(arguments: [
+        ("/Applications/Pavo.app", false),
+        ("/Users/someone/Applications/Pavo.app", false),
+        ("/Volumes/Pavo/Pavo.app", true),
+        ("/private/var/folders/x1/abc/T/AppTranslocation/1234-5678/d/Pavo.app", true),
+    ])
+    func `knows when pavo runs from the disk image`(path: String, temporary: Bool) {
+        #expect(Bundle.isTemporaryCopy(path: path) == temporary)
+    }
+}

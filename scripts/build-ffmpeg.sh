@@ -42,15 +42,25 @@ fetch https://github.com/webmproject/libvpx/archive/refs/tags/v1.15.0.tar.gz lib
 (cd libvpx-1.15.0 && ./configure --prefix="$out" --disable-shared --enable-static --disable-examples --disable-tools \
   --disable-docs --disable-unit-tests --enable-vp9-highbitdepth >/dev/null && make -j"$jobs" >/dev/null && make install >/dev/null)
 
+# reads every format ffmpeg knows (all decoders, demuxers and parsers stay), but only writes what pavo makes
+encoders=h264_videotoolbox,hevc_videotoolbox,mpeg4,libvpx_vp9,wmv2,gif,png,aac,aac_at,libmp3lame,libopus,flac,pcm_s16le,pcm_s16be,wmav2
+muxers=mp4,mov,ipod,matroska,webm,avi,asf,gif,image2,mp3,wav,flac,ogg,opus,aiff
+filters=scale,crop,pad,transpose,fps,format,setsar,split,palettegen,paletteuse,concat,aresample,aformat,null,anull
+
 echo "→ ffmpeg"
 fetch https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz ffmpeg-7.1.1.tar.xz \
   733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
 (cd ffmpeg-7.1.1 && PKG_CONFIG_PATH="$out/lib/pkgconfig" ./configure --prefix="$out" \
   --pkg-config-flags=--static --extra-cflags="-I$out/include" --extra-ldflags="-L$out/lib" \
   --enable-static --disable-shared --disable-debug --disable-doc --disable-ffplay --disable-ffprobe \
-  --disable-network --disable-autodetect \
+  --disable-network --disable-autodetect --disable-devices --disable-hwaccels \
   --enable-videotoolbox --enable-audiotoolbox --enable-zlib \
-  --enable-libmp3lame --enable-libopus --enable-libvpx >/dev/null && make -j"$jobs" >/dev/null && make install >/dev/null)
+  --enable-libmp3lame --enable-libopus --enable-libvpx \
+  --disable-encoders --enable-encoder="$encoders" \
+  --disable-muxers --enable-muxer="$muxers" \
+  --disable-filters --enable-filter="$filters" \
+  --disable-protocols --enable-protocol=file,pipe \
+  --enable-hwaccel=h264_videotoolbox,hevc_videotoolbox >/dev/null && make -j"$jobs" >/dev/null && make install >/dev/null)
 
 cp "$work/ffmpeg-7.1.1/LICENSE.md" "$out/LICENSE.md"
 "$out/bin/ffmpeg" -hide_banner -version | head -1

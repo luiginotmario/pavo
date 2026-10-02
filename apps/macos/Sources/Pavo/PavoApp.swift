@@ -18,14 +18,19 @@ final class PavoApp: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // only one peacock: if pavo is already running (say, one copy in Applications and one
-        // opened from the disk image), hand over to it and bow out
+        // only one peacock. if another copy is already running, the installed one wins: a copy
+        // left running from the disk image gets told to quit, otherwise this one hands over and quits
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
             .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         if !others.isEmpty {
-            DistributedNotificationCenter.default().postNotificationName(Self.showPanel, object: nil, deliverImmediately: true)
-            NSApp.terminate(nil)
-            return
+            let othersAreTemporary = others.allSatisfy { Bundle.isTemporaryCopy(path: $0.bundleURL?.path ?? "") }
+            if othersAreTemporary && !Bundle.main.isTemporaryCopy {
+                others.forEach { $0.terminate() }
+            } else {
+                DistributedNotificationCenter.default().postNotificationName(Self.showPanel, object: nil, deliverImmediately: true)
+                NSApp.terminate(nil)
+                return
+            }
         }
 
         let menuBar = MenuBar()
@@ -40,5 +45,17 @@ final class PavoApp: NSObject, NSApplicationDelegate {
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         menuBar?.showPanel()
         return false
+    }
+}
+
+extension Bundle {
+    /// Running straight from the disk image, or from the temporary copy macOS makes of an app
+    /// that's opened where it was downloaded ("app translocation").
+    static func isTemporaryCopy(path: String) -> Bool {
+        path.hasPrefix("/Volumes/") || path.contains("/AppTranslocation/")
+    }
+
+    var isTemporaryCopy: Bool {
+        Self.isTemporaryCopy(path: bundlePath)
     }
 }

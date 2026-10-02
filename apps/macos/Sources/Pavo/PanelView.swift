@@ -78,7 +78,7 @@ private struct DropHere: View {
             return true
         } isTargeted: { targeted = $0 }
 
-        if Bundle.main.bundlePath.hasPrefix("/Volumes/") {
+        if Bundle.main.isTemporaryCopy {
             Text("you're running pavo from the disk image. drag it into applications first, then open it from there.")
                 .font(Ink.font(12))
                 .foregroundStyle(Ink.pencil)
