@@ -62,6 +62,37 @@ pub struct Action {
     pub group: Group,
 }
 
+/// How hard compress works. Balanced is the default: smaller, with no difference you'd notice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Level {
+    /// barely touches quality
+    Light,
+    /// noticeably smaller, looks and sounds the same at normal size
+    Balanced,
+    /// as small as it gets: lower quality, and very large photos and videos are scaled down
+    Smallest,
+}
+
+impl Level {
+    fn from_action(action: &str) -> Option<Self> {
+        match action {
+            "compress" | "compress:balanced" => Some(Level::Balanced),
+            "compress:light" => Some(Level::Light),
+            "compress:smallest" => Some(Level::Smallest),
+            _ => None,
+        }
+    }
+
+    /// Pick one of three values, lightest first.
+    pub(crate) fn pick<T>(self, light: T, balanced: T, smallest: T) -> T {
+        match self {
+            Level::Light => light,
+            Level::Balanced => balanced,
+            Level::Smallest => smallest,
+        }
+    }
+}
+
 pub enum Event<'a> {
     /// Started working on `input` (`index` of `total`).
     Start { input: &'a Path, index: usize, total: usize },
@@ -235,6 +266,7 @@ pub fn parse_time(text: &str) -> Option<f64> {
 /// Run an action from [`actions_for`]. Returns everything it made.
 ///
 /// Trim takes its range in the id: `trim:0:05-0:20` (start-end, anything [`parse_time`] reads).
+/// Compress takes an optional level: `compress:light`, `compress` (balanced) or `compress:smallest`.
 pub fn run(action: &str, inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<Vec<PathBuf>> {
     if inputs.is_empty() {
         bail!("no files given");
@@ -303,12 +335,18 @@ fn run_one(action: &str, input: &Path, on: &mut dyn FnMut(Event)) -> Result<Vec<
         };
     }
 
+    if let Some(level) = Level::from_action(action) {
+        return match kind {
+            Video => one(ffmpeg::compress(input, level, on)),
+            Audio => one(ffmpeg::compress_audio(input, level, on)),
+            Image => one(images::compress(input, level)),
+            Pdf => one(pdf::compress(input, level, on)),
+            _ => bail!("can't compress {}", paths::name(input)),
+        };
+    }
+
     match (action, kind) {
         ("trim", _) => bail!("trim needs a range like trim:0:05-0:20"),
-        ("compress", Video) => one(ffmpeg::compress(input, on)),
-        ("compress", Audio) => one(ffmpeg::compress_audio(input, on)),
-        ("compress", Image) => one(images::compress(input)),
-        ("compress", Pdf) => one(pdf::compress(input, on)),
         ("split", Video | Audio) => ffmpeg::split(input, on),
         ("rotate", Image) => one(images::rotate(input)),
         ("rotate", Video) => one(ffmpeg::rotate(input, on)),

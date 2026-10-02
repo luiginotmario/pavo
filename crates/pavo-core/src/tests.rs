@@ -220,3 +220,24 @@ fn removes_backgrounds_when_the_helper_is_there() {
     let jpg = run("cutout:white", &[parrot], &mut quiet()).unwrap().remove(0);
     assert_eq!(jpg.file_name().unwrap(), "parrot (white background).jpg");
 }
+
+#[test]
+fn compress_levels_get_smaller() {
+    let dir = TempDir::new("levels");
+    // a noisy photo, so there's something to squeeze
+    let path = dir.0.join("noisy.jpg");
+    let img = image::RgbImage::from_fn(800, 600, |x, y| {
+        let n = ((x * 7919 + y * 104_729) % 251) as u8;
+        image::Rgb([n, n.wrapping_mul(3), (x % 255) as u8])
+    });
+    image::codecs::jpeg::JpegEncoder::new_with_quality(fs::File::create(&path).unwrap(), 98).encode_image(&img).unwrap();
+
+    let size = |level: &str| {
+        let out = run(level, &[path.clone()], &mut quiet()).unwrap().remove(0);
+        let bytes = fs::metadata(&out).unwrap().len();
+        fs::remove_file(out).unwrap();
+        bytes
+    };
+    let (light, balanced, smallest) = (size("compress:light"), size("compress"), size("compress:smallest"));
+    assert!(light > balanced && balanced > smallest, "{light} > {balanced} > {smallest}");
+}

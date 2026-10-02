@@ -11,7 +11,7 @@ use lopdf::{Document, Object, ObjectId, Stream};
 
 use crate::paths::{self, Staged};
 use crate::{docs, images};
-use crate::{cancel, Event};
+use crate::{cancel, Event, Level};
 
 fn open(path: &Path) -> Result<Document> {
     let doc = Document::load(path).map_err(|e| anyhow!("couldn't read {}: {e}", paths::name(path)))?;
@@ -222,9 +222,10 @@ pub fn to_docx(input: &Path) -> Result<PathBuf> {
     staged.commit()
 }
 
-/// Shrinks the photos inside: anything bigger than 2000px is scaled down and re-saved as jpeg.
-pub fn compress(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
-    const LONGEST: u32 = 2000;
+/// Shrinks the photos inside: anything bigger than the level's limit is scaled down and re-saved as jpeg.
+pub fn compress(input: &Path, level: Level, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let longest: u32 = level.pick(2600, 2000, 1400);
+    let quality: u8 = level.pick(75, 60, 45);
     let mut doc = open(input)?;
     let ids: Vec<ObjectId> = doc.objects.keys().copied().collect();
     for (i, id) in ids.iter().enumerate() {
@@ -236,14 +237,14 @@ pub fn compress(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
         let Ok(Object::Stream(stream)) = doc.get_object(*id) else { continue };
         let Some(img) = decode_image(stream, components) else { continue };
 
-        let img = if img.width().max(img.height()) > LONGEST {
-            img.resize(LONGEST, LONGEST, image::imageops::FilterType::Lanczos3)
+        let img = if img.width().max(img.height()) > longest {
+            img.resize(longest, longest, image::imageops::FilterType::Lanczos3)
         } else {
             img
         };
         let img = if components == 1 { DynamicImage::ImageLuma8(img.to_luma8()) } else { DynamicImage::ImageRgb8(img.to_rgb8()) };
         let mut jpeg = Vec::new();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 60).encode_image(&img)?;
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality).encode_image(&img)?;
         if jpeg.len() >= stream.content.len() {
             continue;
         }

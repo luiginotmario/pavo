@@ -111,6 +111,7 @@ private struct Choices: View {
 
     @State private var selection = 0
     @State private var trimming = false
+    @State private var compressing = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -123,6 +124,9 @@ private struct Choices: View {
         section("more", group: "tool", columns: 2)
         if trimming {
             TrimFields { range in converter.start("trim:\(range)", on: urls) }
+        }
+        if compressing {
+            CompressLevels { level in converter.start(level, on: urls) }
         }
         HStack {
             Button("← another file", action: converter.reset).buttonStyle(.plain)
@@ -170,9 +174,37 @@ private struct Choices: View {
     private func pick(_ action: Engine.Action) {
         if action.id == "trim" {
             trimming = true // needs a start and an end first
+        } else if action.id == "compress" {
+            compressing = true // light, balanced or smallest
         } else {
             converter.start(action.id, on: urls)
         }
+    }
+}
+
+private struct CompressLevels: View {
+    let compress: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("how small?").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
+            HStack(spacing: 8) {
+                level("light", "compress:light", "barely touches quality")
+                level("balanced", "compress", "looks the same")
+                level("smallest", "compress:smallest", "as small as it gets")
+            }
+        }
+    }
+
+    private func level(_ title: String, _ action: String, _ hint: String) -> some View {
+        Button { compress(action) } label: {
+            VStack(spacing: 1) {
+                Text(title)
+                Text(hint).font(Ink.font(10, bold: false)).foregroundStyle(Ink.faded).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(SketchButtonStyle(seed: action, size: 13))
     }
 }
 

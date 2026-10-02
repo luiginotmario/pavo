@@ -17,7 +17,7 @@ three ways in:
 
 | drop a… | convert to | edit & tools |
 |---|---|---|
-| photo | jpg · png · webp · heic · avif · tiff · bmp · gif · pdf | remove background · white background · compress · crop · rotate · half size · strip metadata |
+| photo | jpg · png · webp · heic · avif · tiff · bmp · gif · pdf | remove background · white background · compress (light, balanced or smallest) · crop · rotate · half size · strip metadata |
 | svg | png · jpg · webp · pdf | |
 | video | mp4 · mov · mkv · webm · avi · wmv · gif | compress · trim · split · join · crop · rotate · mute · pull out the audio · save a frame · strip metadata |
 | audio | mp3 · m4a · wav · flac · ogg · opus · aiff · wma | compress · trim · split · join · strip metadata |

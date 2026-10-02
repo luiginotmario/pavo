@@ -11,7 +11,7 @@ use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, RgbImage};
 
 use crate::paths::{self, Scratch, Staged};
-use crate::{cancel, Event};
+use crate::{cancel, Event, Level};
 
 pub fn load(path: &Path) -> Result<DynamicImage> {
     let name = paths::name(path);
@@ -196,19 +196,40 @@ pub fn to_pdf(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> 
     staged.commit()
 }
 
-pub fn compress(input: &Path) -> Result<PathBuf> {
+pub fn compress(input: &Path, level: Level) -> Result<PathBuf> {
     let ext = paths::ext(input);
     let staged = Staged::new(paths::output_for(input, &ext, " (compressed)"));
+    // smallest also brings huge photos down to a size that still fills a screen
+    let fit = |img: DynamicImage| match level {
+        Level::Smallest if img.width().max(img.height()) > 2560 => {
+            img.resize(2560, 2560, image::imageops::FilterType::Lanczos3)
+        }
+        _ => img,
+    };
     match ext.as_str() {
         "png" => {
-            let mut opts = oxipng::Options::from_preset(3);
+            let source = if level == Level::Smallest {
+                let mut buffer = std::io::Cursor::new(Vec::new());
+                fit(load(input)?).write_to(&mut buffer, ImageFormat::Png)?;
+                buffer.into_inner()
+            } else {
+                fs::read(input)?
+            };
+            let mut opts = oxipng::Options::from_preset(level.pick(2, 3, 5));
             opts.strip = oxipng::StripChunks::Safe;
-            let out = oxipng::optimize_from_memory(&fs::read(input)?, &opts).map_err(|e| anyhow!("{e}"))?;
+            let out = oxipng::optimize_from_memory(&source, &opts).map_err(|e| anyhow!("{e}"))?;
             fs::write(staged.path(), out)?;
         }
-        "jpg" | "jpeg" | "webp" => save(&load(input)?, staged.path(), &ext, 72)?,
-        "heic" | "heif" => sips(&["-s", "format", "heic", "-s", "formatOptions", "50"], input, staged.path())?,
-        "avif" => sips(&["-s", "format", "avif", "-s", "formatOptions", "50"], input, staged.path())?,
+        "jpg" | "jpeg" | "webp" => save(&fit(load(input)?), staged.path(), &ext, level.pick(85, 72, 55))?,
+        "heic" | "heif" | "avif" => {
+            let quality = level.pick(70, 50, 35).to_string();
+            let format = if ext == "avif" { "avif" } else { "heic" };
+            if level == Level::Smallest {
+                save(&fit(load(input)?), staged.path(), format, level.pick(70, 50, 35))?;
+            } else {
+                sips(&["-s", "format", format, "-s", "formatOptions", &quality], input, staged.path())?;
+            }
+        }
         other => bail!("can't compress .{other} yet"),
     }
     let (before, after) = (fs::metadata(input)?.len(), fs::metadata(staged.path())?.len());

@@ -12,7 +12,7 @@ use std::thread;
 use anyhow::{bail, ensure, Context, Result};
 
 use crate::paths::{self, Staged};
-use crate::{cancel, Event};
+use crate::{cancel, Event, Level};
 
 const GIF_FILTER: &str = "fps=12,scale='min(640,iw)':-1:flags=lanczos,split[a][b];\
                           [a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4";
@@ -235,24 +235,26 @@ pub fn extract_audio(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf>
     staged.commit()
 }
 
-/// Smaller mp4: HEVC on the hardware encoder when there is one, capped at 1080p wide.
-pub fn compress(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+/// Smaller mp4: HEVC on the hardware encoder when there is one. Balanced caps at 1080p, smallest at 720p.
+pub fn compress(input: &Path, level: Level, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
     let ff = binary()?;
     let p = probe(&ff, input)?;
     ensure!(p.video.is_some(), "{} has no video in it", paths::name(input));
 
+    let width: u32 = level.pick(3840, 1920, 1280);
+    let scale = format!("scale='trunc(min({width},iw)/2)*2':-2");
     let mut args = strs(&["-map", "0:v:0", "-map", "0:a?"]);
     if has_encoder(&ff, "hevc_videotoolbox") {
-        args.extend(strs(&["-vf", "scale='trunc(min(1920,iw)/2)*2':-2", "-c:v", "hevc_videotoolbox"]));
-        args.extend(["-b:v".into(), bitrate(&p, 1.2, Some(1920))]);
+        args.extend(["-vf".into(), scale, "-c:v".into(), "hevc_videotoolbox".into()]);
+        args.extend(["-b:v".into(), bitrate(&p, level.pick(2.2, 1.2, 0.8), Some(width))]);
         args.extend(strs(&["-tag:v", "hvc1", "-pix_fmt", "yuv420p"]));
     } else if has_encoder(&ff, "libx264") {
-        args.extend(strs(&["-vf", "scale='trunc(min(1920,iw)/2)*2':-2", "-c:v", "libx264", "-preset", "veryfast"]));
-        args.extend(strs(&["-crf", "28", "-pix_fmt", "yuv420p"]));
+        args.extend(["-vf".into(), scale, "-c:v".into(), "libx264".into(), "-preset".into(), "veryfast".into()]);
+        args.extend(["-crf".into(), level.pick("24", "28", "32").into(), "-pix_fmt".into(), "yuv420p".into()]);
     } else {
-        args.extend(h264(&ff, &p, 2.0, Some(1920)));
+        args.extend(h264(&ff, &p, level.pick(3.0, 2.0, 1.3), Some(width)));
     }
-    args.extend(aac(&ff, 128));
+    args.extend(aac(&ff, level.pick(160, 128, 96)));
     args.extend(strs(&["-movflags", "+faststart"]));
 
     let staged = Staged::new(paths::output_for(input, "mp4", " (compressed)"));
@@ -446,13 +448,13 @@ pub fn frame(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
     staged.commit()
 }
 
-/// Smaller audio: 96 kbps aac, which still sounds fine for voice and most music.
-pub fn compress_audio(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+/// Smaller audio as aac: 128 kbps (light), 96 (balanced, still fine for music), 64 (smallest, fine for voice).
+pub fn compress_audio(input: &Path, level: Level, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
     let ff = binary()?;
     let p = probe(&ff, input)?;
     ensure!(p.audio.is_some(), "{} has no sound in it", paths::name(input));
     let mut args = strs(&["-vn", "-map", "0:a:0"]);
-    args.extend(aac(&ff, 96));
+    args.extend(aac(&ff, level.pick(128, 96, 64)));
     let staged = Staged::new(paths::output_for(input, "m4a", " (compressed)"));
     run(&ff, input, staged.path(), &args, p.duration, on)?;
     let (before, after) = (fs::metadata(input)?.len(), fs::metadata(staged.path())?.len());
