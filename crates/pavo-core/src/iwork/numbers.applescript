@@ -4,6 +4,18 @@ on run argv
 	set outFile to POSIX file (item 2 of argv)
 	set fmt to item 3 of argv
 	set wasRunning to application "Numbers" is running
+	if not wasRunning then
+		-- wake it in the background and wait until it can take commands
+		tell application "Numbers" to launch
+		repeat 50 times
+			try
+				tell application "Numbers" to count documents
+				exit repeat
+			on error
+				delay 0.2
+			end try
+		end repeat
+	end if
 	tell application "Numbers"
 		set doc to open inFile
 		if fmt is "pdf" then

@@ -45,7 +45,8 @@ pub fn export(input: &Path, ext: &str) -> Result<PathBuf> {
         if why.contains("-1743") || why.contains("Not authorized") {
             bail!("pavo isn't allowed to use {app} yet: System Settings → Privacy & Security → Automation → Pavo → {app}");
         }
-        bail!("{app} couldn't export {}", paths::name(input));
+        let detail = why.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("no reason given");
+        bail!("{app} couldn't export {}: {}", paths::name(input), detail.split("error: ").last().unwrap_or(detail).trim());
     }
     staged.commit()
 }
