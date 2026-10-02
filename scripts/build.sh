@@ -48,7 +48,9 @@ if [ -z "$identity" ]; then
   sign=(codesign --force --sign -)
 fi
 entitlements=apps/macos/Pavo.entitlements # apple events, for exporting pages/numbers/keynote files
-"${sign[@]}" "$app/Contents/Helpers/ffmpeg" "$app/Contents/Helpers/pavo-vision"
+for helper in ffmpeg pavo-vision; do
+  if [ -e "$app/Contents/Helpers/$helper" ]; then "${sign[@]}" "$app/Contents/Helpers/$helper"; fi
+done
 "${sign[@]}" --entitlements "$entitlements" "$app/Contents/Helpers/pavo"
 "${sign[@]}" --entitlements "$entitlements" "$app"
 echo "  signed: ${identity:-ad-hoc (local only)}"
