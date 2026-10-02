@@ -21,7 +21,11 @@ pub fn export(input: &Path, ext: &str) -> Result<PathBuf> {
         "key" => ("Keynote", include_str!("iwork/keynote.applescript")),
         other => bail!("can't export .{other}"),
     };
-    let installed = ["/Applications", "/System/Applications"].iter().any(|dir| Path::new(dir).join(format!("{app}.app")).exists());
+    // the current apps are called "Pages Creator Studio" and so on; older Macs have plain "Pages"
+    let installed = ["/Applications", "/System/Applications"]
+        .iter()
+        .flat_map(|dir| [format!("{dir}/{app}.app"), format!("{dir}/{app} Creator Studio.app")])
+        .any(|path| Path::new(&path).exists());
     if !installed {
         bail!("{} needs {app}, which is free on the App Store", paths::name(input));
     }
