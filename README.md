@@ -19,9 +19,9 @@ three ways in:
 |---|---|---|
 | photo | jpg · png · webp · heic · avif · tiff · bmp · gif · pdf | remove background · white background · compress (light, balanced or smallest) · crop · rotate · half size · strip metadata |
 | svg | png · jpg · webp · pdf | |
-| video | mp4 · mov · mkv · webm · avi · wmv · gif | compress · trim · split · join · crop · rotate · mute · pull out the audio · save a frame · strip metadata |
+| video | mp4 · mov · mkv · webm · avi · wmv · gif | remove watermark · compress · trim · split · join · crop · rotate · mute · pull out the audio · save a frame · strip metadata |
 | audio | mp3 · m4a · wav · flac · ogg · opus · aiff · wma | compress · trim · split · join · strip metadata |
-| pdf | png · jpg (every page, 300 dpi) · txt · docx | compress · merge · split into pages · rotate |
+| pdf | png · jpg (every page, 300 dpi) · txt · docx | remove watermark · compress · merge · split into pages · rotate |
 | pages | pdf · docx · epub · txt | |
 | numbers | pdf · xlsx · csv | |
 | keynote | pdf · pptx | |
@@ -30,6 +30,8 @@ three ways in:
 | subtitles | srt · vtt · txt | |
 | archives | | unpack zip · tar · gz · rar · 7z · xz · bz2 |
 | anything | | zip · tar.gz · gzip |
+
+**remove watermark** finds it by itself (pdf watermark objects; on video, text apple's vision framework reads in the same spot all the way through, and marks that never move) or takes the text or a box you point at. it's for your own files: drafts, your exports and recordings. removing watermarks from other people's work can break copyright law.
 
 nothing is ever overwritten. if `clip.mp4` already exists you get `clip 2.mp4`.
 

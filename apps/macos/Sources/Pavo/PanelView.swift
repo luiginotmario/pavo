@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// What opens under the menu bar icon, drawn like the website: pencil on near-black.
@@ -112,6 +113,7 @@ private struct Choices: View {
     @State private var selection = 0
     @State private var trimming = false
     @State private var compressing = false
+    @State private var unwatermarking = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -127,6 +129,9 @@ private struct Choices: View {
         }
         if compressing {
             CompressLevels { level in converter.start(level, on: urls) }
+        }
+        if unwatermarking, let file = urls.first {
+            WatermarkOptions(file: file) { action in converter.start(action, on: urls) }
         }
         HStack {
             Button("← another file", action: converter.reset).buttonStyle(.plain)
@@ -176,9 +181,130 @@ private struct Choices: View {
             trimming = true // needs a start and an end first
         } else if action.id == "compress" {
             compressing = true // light, balanced or smallest
+        } else if action.id == "unwatermark" {
+            unwatermarking = true // automatic, by text (pdf) or by box (video)
         } else {
             converter.start(action.id, on: urls)
         }
+    }
+}
+
+/// Remove watermark: let pavo find it, or point at it. Pdfs take the watermark's text;
+/// videos take a box drawn on one of their frames.
+private struct WatermarkOptions: View {
+    let file: URL
+    let remove: (String) -> Void
+    @State private var text = ""
+
+    private var isPDF: Bool { file.pathExtension.lowercased() == "pdf" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button("find it automatically") { remove("unwatermark") }
+                .buttonStyle(SketchButtonStyle(seed: "unwatermark-auto", size: 13))
+            if isPDF {
+                Text("or remove this text").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
+                HStack(spacing: 8) {
+                    TextField("CONFIDENTIAL", text: $text)
+                        .textFieldStyle(.plain)
+                        .font(Ink.font(13, bold: false))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .sketchBox("watermark-text")
+                        .onSubmit(removeText)
+                    Button("remove", action: removeText)
+                        .buttonStyle(SketchButtonStyle(seed: "unwatermark-text", size: 13))
+                        .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } else {
+                Text("or drag a box around it").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
+                FramePicker(video: file) { box in
+                    remove(String(format: "unwatermark:%.4f,%.4f,%.4f,%.4f", box.minX, box.minY, box.width, box.height))
+                }
+            }
+        }
+    }
+
+    private func removeText() {
+        let words = text.trimmingCharacters(in: .whitespaces)
+        if !words.isEmpty {
+            remove("unwatermark:text=\(words)")
+        }
+    }
+}
+
+/// One frame of the video to draw a box on. The box is handed back as fractions of the frame.
+struct FramePicker: View {
+    let video: URL
+    let picked: (CGRect) -> Void
+
+    @State private var frame: CGImage?
+    @State private var unreadable = false
+    @State private var start: CGPoint?
+    @State private var box: CGRect?
+    private let width: CGFloat = 304
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let frame {
+                let height = width * CGFloat(frame.height) / CGFloat(frame.width)
+                Image(decorative: frame, scale: 1)
+                    .resizable()
+                    .frame(width: width, height: height)
+                    .overlay(alignment: .topLeading) {
+                        if let box {
+                            Rectangle()
+                                .fill(Ink.pencil.opacity(0.18))
+                                .overlay { SketchRect(seed: "watermark-box", roughness: 0.6).stroke(Ink.pencil, lineWidth: 1.4) }
+                                .frame(width: box.width * width, height: box.height * height)
+                                .offset(x: box.minX * width, y: box.minY * height)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { drag in
+                                let size = CGSize(width: width, height: height)
+                                let a = start ?? drag.startLocation
+                                start = a
+                                box = Self.fraction(from: a, to: drag.location, in: size)
+                            }
+                            .onEnded { _ in start = nil }
+                    )
+                    .sketchBox("frame")
+                Button("remove this area") { if let box { picked(box) } }
+                    .buttonStyle(SketchButtonStyle(seed: "unwatermark-box", size: 13))
+                    .disabled(box == nil)
+            } else {
+                Text(unreadable ? "couldn't read a frame from this video" : "loading a frame…")
+                    .font(Ink.font(12, bold: false))
+                    .foregroundStyle(Ink.faded)
+            }
+        }
+        .task {
+            frame = await Self.still(of: video)
+            unreadable = frame == nil
+        }
+    }
+
+    /// A box between two points, clamped to the picture, as fractions of it.
+    static func fraction(from a: CGPoint, to b: CGPoint, in size: CGSize) -> CGRect {
+        let clamp = { (p: CGPoint) in CGPoint(x: min(max(p.x, 0), size.width), y: min(max(p.y, 0), size.height)) }
+        let (p, q) = (clamp(a), clamp(b))
+        return CGRect(
+            x: min(p.x, q.x) / size.width,
+            y: min(p.y, q.y) / size.height,
+            width: abs(q.x - p.x) / size.width,
+            height: abs(q.y - p.y) / size.height
+        )
+    }
+
+    /// A small frame from a second in, the right way up.
+    static func still(of video: URL) async -> CGImage? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: video))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 640, height: 640)
+        return try? await generator.image(at: CMTime(seconds: 1, preferredTimescale: 600)).image
     }
 }
 

@@ -252,3 +252,36 @@ fn offers_exports_for_pages_numbers_and_keynote() {
     assert!(ids(&["budget.numbers".into()]).contains(&"to:xlsx".to_string()));
     assert!(ids(&["talk.key".into()]).contains(&"to:pptx".to_string()));
 }
+
+#[test]
+fn removes_pdf_watermarks_and_keeps_the_rest() {
+    let dir = TempDir::new("watermark");
+    let pdf = dir.0.join("report.pdf");
+    watermark::sample(&pdf);
+    let text = |path: &Path| lopdf::Document::load(path).unwrap().extract_text(&[1]).unwrap();
+    assert!(text(&pdf).contains("DRAFT"));
+
+    let clean = run("unwatermark", &[pdf.clone()], &mut quiet()).unwrap().remove(0);
+    assert_eq!(clean.file_name().unwrap(), "report (no watermark).pdf");
+    let words = text(&clean);
+    assert!(words.contains("Quarterly report"), "real content stays");
+    assert!(words.contains("CONFIDENTIAL"), "plain text stays unless asked for");
+    assert!(!words.contains("DRAFT"), "the diagonal stamp goes");
+    assert!(!words.contains("Sample copy"), "the marked watermark goes");
+    let doc = lopdf::Document::load(&clean).unwrap();
+    let page = doc.get_pages()[&1];
+    assert!(doc.get_page_annotations(page).unwrap().is_empty(), "the watermark annotation goes");
+
+    let by_text = run("unwatermark:text=confidential", &[pdf], &mut quiet()).unwrap().remove(0);
+    assert!(!text(&by_text).contains("CONFIDENTIAL"));
+    assert!(text(&by_text).contains("Quarterly report"));
+}
+
+#[test]
+fn reads_watermark_boxes() {
+    let boxes = parse_regions("0.75,0.88,0.2,0.06;0.1,0.1,0.05,0.05").unwrap();
+    assert_eq!(boxes.len(), 2);
+    assert_eq!(boxes[0], ffmpeg::Region { x: 0.75, y: 0.88, w: 0.2, h: 0.06 });
+    assert!(parse_regions("0.1,0.2,0.3").is_none());
+    assert!(parse_regions("0.1,0.2,0,0.3").is_none(), "an empty box is refused");
+}

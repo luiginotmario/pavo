@@ -3,6 +3,8 @@
 //
 //   pavo-vision remove-background <photo> <out.png>   subject on transparency
 //   pavo-vision white-background  <photo> <out.jpg>   subject on white
+//   pavo-vision find-text         <image>             where text sits: one json line per box,
+//                                                       x/y/w/h as fractions of the image, from the top left
 import CoreImage
 import Foundation
 import Vision
@@ -15,7 +17,7 @@ enum Failure: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .usage: "usage: pavo-vision remove-background|white-background <photo> <output>"
+        case .usage: "usage: pavo-vision remove-background|white-background <photo> <output>, or find-text <image>"
         case .unreadable(let name): "couldn't read \(name)"
         case .noSubject(let name): "couldn't find a subject in \(name)"
         case .unwritable(let name): "couldn't save \(name)"
@@ -43,7 +45,31 @@ func cutOut(_ input: URL) throws(Failure) -> CIImage {
     }
 }
 
+/// Every piece of text Vision can read in the image, with where it sits.
+func findText(_ input: URL) throws(Failure) {
+    let name = input.lastPathComponent
+    guard let image = CIImage(contentsOf: input) else { throw .unreadable(name) }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .fast // positions matter here, not perfect spelling
+    do {
+        try VNImageRequestHandler(ciImage: image).perform([request])
+    } catch {
+        throw .unreadable(name)
+    }
+    for observation in request.results ?? [] {
+        guard let text = observation.topCandidates(1).first?.string else { continue }
+        let box = observation.boundingBox // vision measures from the bottom left
+        let line: [String: Any] = ["text": text, "x": box.minX, "y": 1 - box.maxY, "w": box.width, "h": box.height]
+        if let json = try? JSONSerialization.data(withJSONObject: line) {
+            FileHandle.standardOutput.write(json + Data("\n".utf8))
+        }
+    }
+}
+
 func run(_ arguments: [String]) throws(Failure) {
+    if arguments.count == 3, arguments[1] == "find-text" {
+        return try findText(URL(fileURLWithPath: arguments[2]))
+    }
     guard arguments.count == 4 else { throw .usage }
     let (mode, input, output) = (arguments[1], URL(fileURLWithPath: arguments[2]), URL(fileURLWithPath: arguments[3]))
     let subject = try cutOut(input)

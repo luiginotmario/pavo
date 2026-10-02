@@ -45,7 +45,7 @@ fetch https://github.com/webmproject/libvpx/archive/refs/tags/v1.15.0.tar.gz lib
 # reads every format ffmpeg knows (all decoders, demuxers and parsers stay), but only writes what pavo makes
 encoders=h264_videotoolbox,hevc_videotoolbox,mpeg4,libvpx_vp9,wmv2,gif,png,aac,aac_at,libmp3lame,libopus,flac,pcm_s16le,pcm_s16be,wmav2
 muxers=mp4,mov,ipod,matroska,webm,avi,asf,gif,image2,mp3,wav,flac,ogg,opus,aiff
-filters=scale,crop,pad,transpose,fps,format,setsar,split,palettegen,paletteuse,concat,aresample,aformat,null,anull
+filters=scale,crop,pad,transpose,fps,format,setsar,split,palettegen,paletteuse,concat,aresample,aformat,null,anull,removelogo
 
 echo "→ ffmpeg"
 fetch https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz ffmpeg-7.1.1.tar.xz \

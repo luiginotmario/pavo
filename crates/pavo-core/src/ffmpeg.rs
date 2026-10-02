@@ -274,6 +274,238 @@ pub fn strip_metadata(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf
     staged.commit()
 }
 
+/// A box on the video, as fractions of the frame measured from the top left.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Region {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Region {
+    fn right(&self) -> f64 {
+        self.x + self.w
+    }
+    fn bottom(&self) -> f64 {
+        self.y + self.h
+    }
+    fn overlaps(&self, other: &Region, slack: f64) -> bool {
+        self.x - slack < other.right() && other.x - slack < self.right() && self.y - slack < other.bottom() && other.y - slack < self.bottom()
+    }
+    /// Pieces of one line of text: overlapping vertically, with a gap of no more than a few letters.
+    fn same_line(&self, other: &Region) -> bool {
+        let vertical = self.bottom().min(other.bottom()) - self.y.max(other.y);
+        let gap = (other.x - self.right()).max(self.x - other.right());
+        vertical > 0.5 * self.h.min(other.h) && gap < 3.0 * self.h.max(other.h)
+    }
+    fn union(&self, other: &Region) -> Region {
+        let (x, y) = (self.x.min(other.x), self.y.min(other.y));
+        Region { x, y, w: self.right().max(other.right()) - x, h: self.bottom().max(other.bottom()) - y }
+    }
+    fn padded(&self, by: f64) -> Region {
+        let (px, py) = (self.w * by + 0.004, self.h * by + 0.004);
+        Region { x: self.x - px, y: self.y - py, w: self.w + 2.0 * px, h: self.h + 2.0 * py }
+    }
+}
+
+/// Paints over watermarks by rebuilding each box from the pixels around it (ffmpeg's removelogo).
+/// Without boxes, it finds them: text that Vision reads in the same place all through the video,
+/// and marks that stay perfectly still while the rest of the picture moves.
+pub fn remove_watermark(input: &Path, regions: Option<Vec<Region>>, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let ff = binary()?;
+    let p = probe(&ff, input)?;
+    ensure!(p.video.is_some() && p.width > 0, "{} has no video in it", paths::name(input));
+    let regions = match regions {
+        Some(given) => given,
+        None => find_watermarks(&ff, input, &p)?,
+    };
+    ensure!(!regions.is_empty(), "couldn't find a watermark in {}. try drawing a box around it", paths::name(input));
+
+    // removelogo rebuilds every white pixel of a mask from the picture around it (lgpl, unlike delogo)
+    let (fw, fh) = (p.width, p.height);
+    let mask = paths::Scratch::new("png");
+    let mut white = image::GrayImage::new(fw, fh);
+    for r in &regions {
+        let x0 = (r.x.max(0.0) * fw as f64) as u32;
+        let y0 = (r.y.max(0.0) * fh as f64) as u32;
+        let x1 = ((r.right().min(1.0)) * fw as f64).ceil() as u32;
+        let y1 = ((r.bottom().min(1.0)) * fh as f64).ceil() as u32;
+        for y in y0..y1.min(fh) {
+            for x in x0..x1.min(fw) {
+                white.put_pixel(x, y, image::Luma([255]));
+            }
+        }
+    }
+    white.save(&mask.0)?;
+    let erase = vec![format!("removelogo=f={}", mask.0.display())];
+
+    let ext = paths::ext(input);
+    let ext = if matches!(ext.as_str(), "mov" | "mp4" | "m4v") { ext } else { "mp4".into() };
+    let mut args = strs(&["-map", "0:v:0", "-map", "0:a?"]);
+    let mut video = h264(&ff, &p, 4.0, None);
+    video[1] = format!("{},{}", erase.join(","), video[1]);
+    args.extend(video);
+    args.extend(strs(&["-c:a", "copy", "-movflags", "+faststart"]));
+    let staged = Staged::new(paths::output_for(input, &ext, " (no watermark)"));
+    run(&ff, input, staged.path(), &args, p.duration, on)?;
+    staged.commit()
+}
+
+/// Where the watermarks are, from a handful of frames spread across the video.
+pub fn find_watermarks(ff: &Path, input: &Path, p: &Probe) -> Result<Vec<Region>> {
+    let duration = p.duration.unwrap_or(0.0);
+    let times: Vec<f64> = [0.12, 0.3, 0.5, 0.7, 0.88].iter().map(|f| f * duration).collect();
+    let mut frames = Vec::new();
+    for (i, t) in times.iter().enumerate() {
+        cancel::check()?;
+        let frame = paths::Scratch::new(&format!("{i}.png"));
+        let ok = Command::new(ff)
+            .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", &format!("{t:.3}"), "-i"])
+            .arg(input)
+            .args(["-frames:v", "1", "-vf", "scale=640:-2"])
+            .arg(&frame.0)
+            .status()?
+            .success();
+        if ok && frame.0.exists() {
+            frames.push(frame);
+        }
+    }
+    ensure!(frames.len() >= 3, "{} is too short to look for a watermark", paths::name(input));
+
+    let mut found = text_that_stays(&frames);
+    found.extend(marks_that_stay(&frames));
+
+    // merge pieces of the same watermark ("@pa" + "demo"), then give each a little room
+    let mut merged: Vec<Region> = Vec::new();
+    for region in found {
+        merged.push(region);
+        // keep folding until nothing touches anything else
+        let mut changed = true;
+        while changed {
+            changed = false;
+            'outer: for i in 0..merged.len() {
+                for j in i + 1..merged.len() {
+                    if merged[i].overlaps(&merged[j], 0.01) || merged[i].same_line(&merged[j]) {
+                        let joined = merged[i].union(&merged[j]);
+                        merged.remove(j);
+                        merged[i] = joined;
+                        changed = true;
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+    Ok(merged.into_iter().map(|r| r.padded(0.15)).collect())
+}
+
+/// Text Vision reads in (nearly) the same place in most frames: captions move on, watermarks don't.
+fn text_that_stays(frames: &[paths::Scratch]) -> Vec<Region> {
+    let Ok(helper) = crate::images::vision_helper() else { return vec![] };
+    let per_frame: Vec<Vec<Region>> = frames
+        .iter()
+        .map(|frame| {
+            let out = Command::new(&helper).arg("find-text").arg(&frame.0).output();
+            let text = out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+            text.lines()
+                .filter_map(|line| {
+                    let field = |k: &str| {
+                        let at = line.find(&format!("\"{k}\":"))? + k.len() + 3;
+                        line[at..].split([',', '}']).next()?.trim().parse::<f64>().ok()
+                    };
+                    Some(Region { x: field("x")?, y: field("y")?, w: field("w")?, h: field("h")? })
+                })
+                .collect()
+        })
+        .collect();
+
+    let needed = (frames.len() * 3).div_ceil(5); // in at least 3 of 5 frames
+    let mut steady = Vec::new();
+    for region in per_frame.iter().flatten() {
+        let seen = per_frame.iter().filter(|boxes| boxes.iter().any(|b| b.overlaps(region, -region.w.min(region.h) * 0.3))).count();
+        if seen >= needed && !steady.iter().any(|s: &Region| s.overlaps(region, 0.0)) {
+            steady.push(*region);
+        }
+    }
+    steady
+}
+
+/// Sharp details that stay pixel-for-pixel the same while the rest of the picture changes:
+/// a logo. Skipped when the whole video barely moves, since then everything looks "still".
+fn marks_that_stay(frames: &[paths::Scratch]) -> Vec<Region> {
+    let images: Vec<image::GrayImage> = frames.iter().filter_map(|f| image::open(&f.0).ok()).map(|i| i.to_luma8()).collect();
+    let Some(first) = images.first() else { return vec![] };
+    let (w, h) = first.dimensions();
+    if w < 32 || h < 32 || images.iter().any(|i| i.dimensions() != (w, h)) {
+        return vec![];
+    }
+
+    // still pixels, and still pixels sitting on a sharp edge
+    let (cols, rows) = (32u32, 18u32);
+    let mut cells = vec![0u32; (cols * rows) as usize];
+    let mut still = 0u64;
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let values: Vec<i32> = images.iter().map(|i| i.get_pixel(x, y).0[0] as i32).collect();
+            let spread = values.iter().max().unwrap() - values.iter().min().unwrap();
+            if spread > 10 {
+                continue;
+            }
+            still += 1;
+            let at = |dx: i32, dy: i32| first.get_pixel((x as i32 + dx) as u32, (y as i32 + dy) as u32).0[0] as i32;
+            let edge = (at(1, 0) - at(-1, 0)).abs() + (at(0, 1) - at(0, -1)).abs();
+            if edge > 60 {
+                cells[((y * rows / h) * cols + x * cols / w) as usize] += 1;
+            }
+        }
+    }
+    if still as f64 > 0.5 * (w * h) as f64 {
+        return vec![]; // a mostly still video (a screen recording, a talking head): can't tell marks from content
+    }
+
+    // group busy cells that touch into boxes, and keep the small ones
+    let cell_area = (w / cols) * (h / rows);
+    let busy = |i: usize| cells[i] as f64 > cell_area as f64 * 0.04;
+    let mut seen = vec![false; cells.len()];
+    let mut boxes = Vec::new();
+    for start in 0..cells.len() {
+        if seen[start] || !busy(start) {
+            continue;
+        }
+        let (mut min_c, mut max_c, mut min_r, mut max_r) = (u32::MAX, 0, u32::MAX, 0);
+        let mut queue = vec![start];
+        seen[start] = true;
+        let mut count = 0;
+        while let Some(i) = queue.pop() {
+            count += 1;
+            let (c, r) = (i as u32 % cols, i as u32 / cols);
+            (min_c, max_c, min_r, max_r) = (min_c.min(c), max_c.max(c), min_r.min(r), max_r.max(r));
+            for (dc, dr) in [(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                let (nc, nr) = (c as i32 + dc, r as i32 + dr);
+                if nc < 0 || nr < 0 || nc >= cols as i32 || nr >= rows as i32 {
+                    continue;
+                }
+                let n = (nr as u32 * cols + nc as u32) as usize;
+                if !seen[n] && busy(n) {
+                    seen[n] = true;
+                    queue.push(n);
+                }
+            }
+        }
+        let area = ((max_c - min_c + 1) * (max_r - min_r + 1)) as f64 / (cols * rows) as f64;
+        if area <= 0.08 && count >= 1 {
+            boxes.push(Region {
+                x: min_c as f64 / cols as f64,
+                y: min_r as f64 / rows as f64,
+                w: (max_c - min_c + 1) as f64 / cols as f64,
+                h: (max_r - min_r + 1) as f64 / rows as f64,
+            });
+        }
+    }
+    boxes
+}
+
 fn is_audio_ext(ext: &str) -> bool {
     matches!(ext, "mp3" | "m4a" | "aac" | "wav" | "flac" | "ogg" | "oga" | "opus" | "aiff" | "aif" | "wma")
 }

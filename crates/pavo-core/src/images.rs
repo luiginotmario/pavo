@@ -137,7 +137,7 @@ pub fn cut_out(input: &Path, white: bool) -> Result<PathBuf> {
 }
 
 /// Ships next to the pavo binary inside the app (Contents/Helpers/pavo-vision).
-fn vision_helper() -> Result<PathBuf> {
+pub(crate) fn vision_helper() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("PAVO_VISION") {
         return Ok(path.into());
     }

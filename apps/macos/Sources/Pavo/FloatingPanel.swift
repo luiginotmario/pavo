@@ -65,10 +65,11 @@ final class MenuPanel {
         place(panel)
         panel.makeKeyAndOrderFront(nil)
 
-        // clicking anywhere else, or escape, closes it
+        // a click anywhere else closes it, but pressing on a file to drag it in doesn't:
+        // the panel only closes when the press ends without the mouse having moved
         monitors = [
-            NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { _ in
-                MainActor.assumeIsolated { self.close() }
+            NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown]) { event in
+                MainActor.assumeIsolated { self.outsideMouse(event.type) }
             },
             NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 guard event.keyCode == 53 else { return event } // esc
@@ -78,9 +79,22 @@ final class MenuPanel {
         ].compactMap { $0 }
     }
 
+    private var clickingOutside = false
+
+    private func outsideMouse(_ type: NSEvent.EventType) {
+        switch type {
+        case .leftMouseDown: clickingOutside = true
+        case .leftMouseDragged: clickingOutside = false // a drag, maybe of a file into the panel
+        case .leftMouseUp where clickingOutside: close()
+        case .rightMouseDown: close()
+        default: break
+        }
+    }
+
     func close() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+        clickingOutside = false
         panel?.orderOut(nil)
         panel = nil
         if case .done = converter.phase { converter.reset() }

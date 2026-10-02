@@ -85,3 +85,19 @@ struct InstallLocationTests {
         #expect(Bundle.isTemporaryCopy(path: path) == temporary)
     }
 }
+
+struct WatermarkBoxTests {
+    let size = CGSize(width: 300, height: 200)
+
+    @Test func `a box dragged either way comes out the same`() {
+        let forward = FramePicker.fraction(from: CGPoint(x: 30, y: 20), to: CGPoint(x: 150, y: 100), in: size)
+        let backward = FramePicker.fraction(from: CGPoint(x: 150, y: 100), to: CGPoint(x: 30, y: 20), in: size)
+        #expect(forward == backward)
+        #expect(forward == CGRect(x: 0.1, y: 0.1, width: 0.4, height: 0.4))
+    }
+
+    @Test func `a drag past the edge stops at the edge`() {
+        let box = FramePicker.fraction(from: CGPoint(x: 240, y: 150), to: CGPoint(x: 400, y: 300), in: size)
+        #expect(box.maxX == 1 && box.maxY == 1)
+    }
+}

@@ -13,6 +13,7 @@ mod images;
 mod iwork;
 mod paths;
 mod pdf;
+mod watermark;
 #[cfg(target_os = "macos")]
 mod render;
 
@@ -224,6 +225,7 @@ pub fn actions_for(inputs: &[PathBuf]) -> Vec<Action> {
             add(Group::Edit, "crop:9x16", "crop 9:16");
             add(Group::Edit, "rotate", "rotate 90°");
             add(Group::Edit, "mute", "mute");
+            add(Group::Edit, "unwatermark", "remove watermark");
             add(Group::Tool, "audio", "pull out the audio");
             add(Group::Tool, "frame", "save a frame");
             add(Group::Tool, "strip-metadata", "strip metadata");
@@ -246,6 +248,7 @@ pub fn actions_for(inputs: &[PathBuf]) -> Vec<Action> {
             }
             add(Group::Edit, "pdf:split", "split into pages");
             add(Group::Edit, "pdf:rotate", "rotate 90°");
+            add(Group::Edit, "unwatermark", "remove watermark");
         }
         Kind::Document if cfg!(target_os = "macos") => convert_to(&mut add, docs::TARGETS),
         Kind::Text if cfg!(target_os = "macos") => convert_to(&mut add, TEXT_TARGETS),
@@ -281,10 +284,21 @@ pub fn parse_time(text: &str) -> Option<f64> {
     text.trim().split(':').try_fold(0.0, |total, part| Some(total * 60.0 + part.trim().parse::<f64>().ok()?))
 }
 
+fn parse_regions(list: &str) -> Option<Vec<ffmpeg::Region>> {
+    list.split(';')
+        .map(|one| {
+            let n: Vec<f64> = one.split(',').map(|v| v.trim().parse().ok()).collect::<Option<_>>()?;
+            let [x, y, w, h] = n[..] else { return None };
+            (w > 0.0 && h > 0.0).then_some(ffmpeg::Region { x, y, w, h })
+        })
+        .collect()
+}
+
 /// Run an action from [`actions_for`]. Returns everything it made.
 ///
 /// Trim takes its range in the id: `trim:0:05-0:20` (start-end, anything [`parse_time`] reads).
 /// Compress takes an optional level: `compress:light`, `compress` (balanced) or `compress:smallest`.
+/// Remove watermark finds it by itself (`unwatermark`) or by its text (`unwatermark:text=CONFIDENTIAL`).
 pub fn run(action: &str, inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<Vec<PathBuf>> {
     if inputs.is_empty() {
         bail!("no files given");
@@ -350,6 +364,22 @@ fn run_one(action: &str, input: &Path, on: &mut dyn FnMut(Event)) -> Result<Vec<
             Image => one(images::crop(input, w, h)),
             Video => one(ffmpeg::crop(input, w, h, on)),
             _ => bail!("can't crop {}", paths::name(input)),
+        };
+    }
+
+    if action == "unwatermark" || action.starts_with("unwatermark:") {
+        let detail = action.strip_prefix("unwatermark:");
+        return match kind {
+            Pdf => one(watermark::remove_from_pdf(input, detail.and_then(|d| d.strip_prefix("text=")), on)),
+            Video => {
+                // unwatermark:x,y,w,h (fractions of the frame, from the top left), boxes separated by ;
+                let boxes = match detail {
+                    Some(list) => Some(parse_regions(list).context("boxes look like unwatermark:0.8,0.9,0.15,0.05")?),
+                    None => None,
+                };
+                one(ffmpeg::remove_watermark(input, boxes, on))
+            }
+            _ => bail!("can't remove a watermark from {}", paths::name(input)),
         };
     }
 
