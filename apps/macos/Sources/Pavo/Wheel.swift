@@ -34,8 +34,9 @@ final class WheelModel {
     }
 }
 
-/// A wheel of formats around the pointer. Two ways in:
-/// - hold ⇧ while dragging files anywhere, then drop on a bubble (⌥ switches to tools)
+/// A wheel of formats around the pointer. Three ways in:
+/// - drag files and pause for a moment near where you picked them up, then drop on a bubble
+/// - hold ⇧ while dragging, for the wheel straight away (⌥ switches to tools)
 /// - right-click files → Convert with Pavo, then click a bubble
 ///
 /// Watching drags needs no special permission: only mouse events are monitored, and only the
@@ -49,6 +50,21 @@ final class Wheel {
     var isOpen: Bool { panel != nil }
     /// The drag pasteboard's change count when we last looked, so each drag is only picked up once.
     private var seenDrag = NSPasteboard(name: .drag).changeCount
+
+    /// A file drag that hasn't opened the wheel (yet).
+    private struct FileDrag {
+        let urls: [URL]
+        let start: CGPoint
+        var location: CGPoint
+        var lastMoved: ContinuousClock.Instant
+    }
+
+    private var fileDrag: FileDrag?
+    /// Only alive while a file is being dragged: looks ten times a second for a pause.
+    private var pauseWatch: Task<Void, Never>?
+    private static let pause: Duration = .milliseconds(600)
+    /// Pausing further than this from where the file was picked up is aiming at something, not wondering.
+    private static let nearStart: CGFloat = 150
 
     init(converter: Converter) {
         self.converter = converter
@@ -80,16 +96,59 @@ final class Wheel {
             }
             return
         }
-        guard flags.contains(.shift), !converter.isWorking else { return }
-        let pasteboard = NSPasteboard(name: .drag)
-        guard pasteboard.changeCount != seenDrag else { return }
-        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        guard !urls.isEmpty else { return }
-        seenDrag = pasteboard.changeCount
-        open(for: urls, mode: .drag, tools: flags.contains(.option))
+        guard !converter.isWorking else { return }
+        let location = NSEvent.mouseLocation
+
+        if fileDrag == nil {
+            let pasteboard = NSPasteboard(name: .drag)
+            guard pasteboard.changeCount != seenDrag else { return }
+            let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+            guard !urls.isEmpty else { return }
+            seenDrag = pasteboard.changeCount
+            fileDrag = FileDrag(urls: urls, start: location, location: location, lastMoved: .now)
+            watchForPause()
+        }
+        guard var drag = fileDrag else { return }
+
+        if flags.contains(.shift) {
+            open(for: drag.urls, mode: .drag, tools: flags.contains(.option))
+            return
+        }
+        if hypot(location.x - drag.location.x, location.y - drag.location.y) > 3 {
+            drag.location = location
+            drag.lastMoved = .now
+            fileDrag = drag
+        }
+    }
+
+    /// Opens the wheel when a dragged file is held still near where it was picked up.
+    private func watchForPause() {
+        pauseWatch?.cancel()
+        pauseWatch = Task {
+            while panel == nil {
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+                guard let drag = fileDrag else { return }
+                if Self.isWondering(start: drag.start, at: drag.location, stillFor: .now - drag.lastMoved) {
+                    open(for: drag.urls, mode: .drag, tools: NSEvent.modifierFlags.contains(.option))
+                    return
+                }
+            }
+        }
+    }
+
+    /// Held still long enough, close to where the file was picked up: "what do I do with this?"
+    static func isWondering(start: CGPoint, at location: CGPoint, stillFor: Duration) -> Bool {
+        stillFor >= pause && hypot(location.x - start.x, location.y - start.y) <= nearStart
     }
 
     private func released() {
+        fileDrag = nil
+        pauseWatch?.cancel()
+        pauseWatch = nil
         guard panel != nil, model.mode == .drag else { return }
         // a drop on a bubble lands just before this, so give it a moment
         Task {

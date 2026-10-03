@@ -124,3 +124,19 @@ struct UpdaterTests {
         #expect(!Updater.isSignedByUs(URL(fileURLWithPath: "/System/Applications/Calculator.app")), "apple's own apps aren't ours")
     }
 }
+
+struct DragPauseTests {
+    let start = CGPoint(x: 400, y: 300)
+
+    @Test func `a pause near the file opens the wheel`() {
+        #expect(Wheel.isWondering(start: start, at: CGPoint(x: 460, y: 340), stillFor: .milliseconds(700)))
+    }
+
+    @Test func `moving along never opens it`() {
+        #expect(!Wheel.isWondering(start: start, at: CGPoint(x: 420, y: 310), stillFor: .milliseconds(200)))
+    }
+
+    @Test func `a pause far away is aiming at something, so it stays shut`() {
+        #expect(!Wheel.isWondering(start: start, at: CGPoint(x: 900, y: 600), stillFor: .seconds(2)))
+    }
+}

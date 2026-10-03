@@ -97,7 +97,7 @@ private struct DropHere: View {
                 .font(Ink.font(12, bold: false))
                 .foregroundStyle(Ink.faded)
         }
-        Text("tip: hold ⇧ while dragging a file anywhere for the wheel. add ⌥ for tools.")
+        Text("tip: drag any file and pause for a moment, and the wheel opens right there. ⇧ opens it straight away, ⌥ shows tools.")
             .font(Ink.font(11, bold: false))
             .foregroundStyle(Ink.faded)
             .fixedSize(horizontal: false, vertical: true)

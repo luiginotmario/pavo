@@ -13,7 +13,7 @@ a tiny, open-source menu bar app that converts files. drop a file on the peacock
 three ways in:
 
 - **drop** files on the peacock in your menu bar (or click it and choose some)
-- **hold ⇧ while dragging** files anywhere and a wheel of formats opens around your pointer. hold ⌥ too for edits and tools
+- **drag a file and pause for a moment** near where you picked it up, and a wheel of formats opens right there. hold ⇧ while dragging for it straight away, ⌥ for edits and tools
 - **right-click** files → services → convert with pavo, and the same wheel opens
 
 | drop a… | convert to | edit & tools |
