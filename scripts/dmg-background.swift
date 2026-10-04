@@ -45,6 +45,11 @@ struct Background: View {
                 Text("drag it over").font(.custom("Caveat", size: 34).weight(.bold)).foregroundStyle(Ink.faded),
                 at: CGPoint(x: Layout.window.width / 2, y: 336)
             )
+            // the one thing worth knowing before you start
+            context.draw(
+                Text("then: drag any file and pause for a moment").font(.custom("Caveat", size: 24).weight(.medium)).foregroundStyle(Ink.faded.opacity(0.85)),
+                at: CGPoint(x: Layout.window.width / 2, y: 376)
+            )
         }
         .frame(width: Layout.window.width, height: Layout.window.height)
         .background(Ink.paper)
