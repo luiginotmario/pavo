@@ -135,7 +135,8 @@ final class Updater {
         } catch {
             staged = .failure(error)
         }
-        try? await Self.run("/usr/bin/hdiutil", ["detach", "-quiet", mount.path])
+        // the signature check can keep files on the image open, so a polite detach isn't enough
+        try? await Self.run("/usr/bin/hdiutil", ["detach", "-force", "-quiet", mount.path])
         let app = try staged.get()
         log.notice("staged \(release.tag_name, privacy: .public)")
         return app
