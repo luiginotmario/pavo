@@ -6,7 +6,7 @@ private let log = Logger(subsystem: "com.giginotmario.pavo", category: "update")
 
 /// Keeps pavo up to date without asking and without running in the background.
 ///
-/// Nothing happens on a timer: when the peacock is clicked (at most every 12 hours) pavo asks GitHub for
+/// Nothing happens on a timer: when the peacock is clicked (at most once an hour) pavo asks GitHub for
 /// the latest release. A newer one is downloaded, checked to be signed by pavo's own developer ID,
 /// and staged next to the app. Once the panel is closed and nothing is converting, the two are
 /// swapped with renames and pavo reopens. Any failure leaves the current version untouched.
@@ -16,7 +16,7 @@ final class Updater {
 
     /// GitHub's latest release, or a stand-in feed for testing (PAVO_UPDATE_FEED).
     private let feed: URL
-    private let interval: TimeInterval = 12 * 60 * 60
+    private let interval: TimeInterval = 60 * 60
     private var checking = false
     /// A verified newer Pavo.app, waiting next to the current one.
     private(set) var staged: URL?

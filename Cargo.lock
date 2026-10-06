@@ -819,7 +819,7 @@ dependencies = [
 
 [[package]]
 name = "pavo-cli"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "libc",
@@ -829,7 +829,7 @@ dependencies = [
 
 [[package]]
 name = "pavo-core"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "anyhow",
  "flate2",
