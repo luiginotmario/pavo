@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 
 @testable import Pavo
@@ -138,5 +138,39 @@ struct DragPauseTests {
 
     @Test func `a pause far away is aiming at something, so it stays shut`() {
         #expect(!Wheel.isWondering(start: start, at: CGPoint(x: 900, y: 600), stillFor: .seconds(2)))
+    }
+}
+
+struct ScreenshotTests {
+    @Test func `only the three newest stay`() {
+        let screenshots = Screenshots()
+        let taken = (1...4).map { URL(fileURLWithPath: "/tmp/Screenshot \($0).png") }
+        taken.forEach(screenshots.remember)
+        #expect(screenshots.recent == taken.reversed().prefix(3).map(\.self))
+    }
+
+    @Test func `a screenshot leaves the row once another app takes it`() async throws {
+        let screenshots = Screenshots()
+        let (kept, used) = (URL(fileURLWithPath: "/tmp/Screenshot kept.png"), URL(fileURLWithPath: "/tmp/Screenshot used.png"))
+        [kept, used].forEach(screenshots.remember)
+        let drag = screenshots.dragItem(for: used)
+        #expect(screenshots.recent.count == 2, "starting a drag isn't using it")
+
+        // other apps read a dragged file's url as its bytes
+        let taken = try await drag.loadItem(forTypeIdentifier: "public.file-url") as? Data
+        #expect(taken.flatMap { URL(dataRepresentation: $0, relativeTo: nil) } == used)
+        await Task.yield()
+        #expect(screenshots.recent == [kept])
+    }
+
+    @Test func `thumbnails are small, whatever the screenshot's size`() async throws {
+        let png = FileManager.default.temporaryDirectory.appending(path: "pavo-big-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: png) }
+        let big = try #require(CGContext(data: nil, width: 5120, height: 2880, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        try #require(NSBitmapImageRep(cgImage: big).representation(using: .png, properties: [:])).write(to: png)
+
+        let thumbnail = try #require(await Screenshots.thumbnail(of: png, size: CGSize(width: 96, height: 60)))
+        #expect(thumbnail.width <= 192 && thumbnail.height <= 120)
     }
 }

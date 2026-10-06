@@ -10,9 +10,11 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
     private lazy var panel = MenuPanel(
         converter: converter,
         chooseFiles: { self.chooseFiles() },
+        screenshots: screenshots,
         closed: { self.installIfIdle() }
     )
     private let updater = Updater()
+    private let screenshots = Screenshots()
     private var badgeReset: Task<Void, Never>?
 
 
@@ -30,6 +32,9 @@ final class MenuBar: NSObject, NSWindowDelegate, NSDraggingDestination {
         button.window?.delegate = self
         followConverter()
         updater.tidyUp()
+        if screenshots.isOn {
+            screenshots.start()
+        }
 
         // right-click files → Convert with Pavo (the service is declared in Info.plist)
         NSApp.servicesProvider = self

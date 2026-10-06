@@ -34,6 +34,7 @@ extension NSPanel {
 final class MenuPanel {
     private let converter: Converter
     private let chooseFiles: () -> Void
+    private let screenshots: Screenshots
     private let closed: () -> Void
     private var panel: KeyPanel?
     private var anchor = NSRect.zero
@@ -41,9 +42,15 @@ final class MenuPanel {
 
     var isOpen: Bool { panel != nil }
 
-    init(converter: Converter, chooseFiles: @escaping () -> Void, closed: @escaping () -> Void) {
+    init(
+        converter: Converter,
+        chooseFiles: @escaping () -> Void,
+        screenshots: Screenshots,
+        closed: @escaping () -> Void
+    ) {
         self.converter = converter
         self.chooseFiles = chooseFiles
+        self.screenshots = screenshots
         self.closed = closed
     }
 
@@ -58,6 +65,7 @@ final class MenuPanel {
         let view = PanelView(
             converter: converter,
             chooseFiles: chooseFiles,
+            screenshots: screenshots,
             close: { self.close() },
             quit: { NSApp.terminate(nil) },
             resized: { self.place(size: $0) }

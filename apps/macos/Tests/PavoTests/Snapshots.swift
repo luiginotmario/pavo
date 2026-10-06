@@ -23,6 +23,13 @@ struct Snapshots {
         for file in [video, pdf] { try Data().write(to: file) }
 
         try save(panel(Converter()), "panel-empty")
+        let screenshots = Screenshots()
+        for name in ["one", "two", "three"] {
+            let screenshot = files.appending(path: "Screenshot \(name).png")
+            try Data().write(to: screenshot)
+            screenshots.remember(screenshot)
+        }
+        try save(panel(Converter(), screenshots: screenshots), "panel-screenshots")
 
         let converter = Converter()
         await converter.load([video])
@@ -42,8 +49,8 @@ struct Snapshots {
         try save(WheelView(model: model, size: 400) { _ in }, "wheel-tools")
     }
 
-    private func panel(_ converter: Converter) -> some View {
-        PanelView(converter: converter, chooseFiles: {}, close: {}, quit: {}, resized: { _ in })
+    private func panel(_ converter: Converter, screenshots: Screenshots = Screenshots()) -> some View {
+        PanelView(converter: converter, chooseFiles: {}, screenshots: screenshots, close: {}, quit: {}, resized: { _ in })
     }
 
     private func save(_ view: some View, _ name: String) throws {

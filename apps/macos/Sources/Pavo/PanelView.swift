@@ -5,6 +5,7 @@ import SwiftUI
 struct PanelView: View {
     let converter: Converter
     let chooseFiles: () -> Void
+    let screenshots: Screenshots
     let close: () -> Void
     let quit: () -> Void
     let resized: (CGSize) -> Void
@@ -26,7 +27,7 @@ struct PanelView: View {
     @ViewBuilder private var content: some View {
         switch converter.phase {
         case .empty:
-            DropHere(converter: converter, chooseFiles: chooseFiles, quit: quit)
+            DropHere(converter: converter, chooseFiles: chooseFiles, screenshots: screenshots, quit: quit)
         case .loading(let urls):
             Header(urls.displayName)
             Text("reading…").font(Ink.font(13, bold: false)).foregroundStyle(Ink.faded)
@@ -60,6 +61,7 @@ private struct Header: View {
 private struct DropHere: View {
     let converter: Converter
     let chooseFiles: () -> Void
+    let screenshots: Screenshots
     let quit: () -> Void
     @State private var targeted = false
 
@@ -97,10 +99,63 @@ private struct DropHere: View {
                 .font(Ink.font(12, bold: false))
                 .foregroundStyle(Ink.faded)
         }
+        let recent = screenshots.recent.filter { FileManager.default.fileExists(atPath: $0.path) }
+        if !recent.isEmpty {
+            RecentScreenshots(screenshots: recent, drag: screenshots.dragItem(for:)) { screenshot in
+                screenshots.forget(screenshot)
+                Task { await converter.load([screenshot]) }
+            }
+        }
+
+        Toggle(isOn: Binding(get: { screenshots.isOn }, set: { screenshots.turn(on: $0) })) {
+            Text("put new screenshots on the clipboard").font(Ink.font(12, bold: false)).foregroundStyle(Ink.pencil)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.mini)
+        .help("take a screenshot, then ⌘V it anywhere. desktop screenshots are also filed into Pictures/Screenshots.")
+
         Text("tip: drag any file and pause for a moment, and the wheel opens right there. ⇧ opens it straight away, ⌥ shows tools.")
             .font(Ink.font(11, bold: false))
             .foregroundStyle(Ink.faded)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The last few screenshots, ready to drag into any app, or click to convert.
+private struct RecentScreenshots: View {
+    let screenshots: [URL]
+    let drag: (URL) -> NSItemProvider
+    let pick: (URL) -> Void
+
+    var body: some View {
+        Text("recent screenshots · drag one anywhere").font(Ink.font(12, bold: false)).foregroundStyle(Ink.faded)
+        HStack(spacing: 8) {
+            ForEach(screenshots, id: \.self) { screenshot in
+                Thumbnail(screenshot: screenshot)
+                    .onTapGesture { pick(screenshot) }
+                    .onDrag { drag(screenshot) }
+                    .help(screenshot.lastPathComponent)
+            }
+        }
+    }
+}
+
+private struct Thumbnail: View {
+    static let size = CGSize(width: 96, height: 60)
+    let screenshot: URL
+    @State private var image: CGImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(decorative: image, scale: 2).resizable().scaledToFill()
+            }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .clipped()
+        .sketchBox(screenshot.lastPathComponent)
+        .contentShape(Rectangle())
+        .task(id: screenshot) { image = await Screenshots.thumbnail(of: screenshot, size: Self.size) }
     }
 }
 
