@@ -75,6 +75,22 @@ fn converts_images() {
 }
 
 #[test]
+#[cfg(target_os = "macos")]
+fn phone_photos_come_out_upright() {
+    // 30x20, red in the top left, saved with a "turn 90° clockwise" tag like a portrait iphone photo
+    let dir = TempDir::new("upright");
+    let heic = dir.0.join("sideways.heic");
+    fs::write(&heic, include_bytes!("fixtures/sideways.heic")).unwrap();
+    for target in ["png", "jpg"] {
+        let out = run(&format!("to:{target}"), &[heic.clone()], &mut quiet()).unwrap();
+        let img = image::open(&out[0]).unwrap().to_rgb8();
+        assert_eq!(img.dimensions(), (20, 30), "{target}");
+        let corner = img.get_pixel(15, 4);
+        assert!(corner[0] > 200 && corner[1] < 60, "{target}: red should be top right, got {corner:?}");
+    }
+}
+
+#[test]
 fn strips_jpeg_metadata_without_touching_pixels() {
     let dir = TempDir::new("strip");
     let jpg = photo(&dir.0, "pic.jpg");

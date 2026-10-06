@@ -18,19 +18,24 @@ pub fn load(path: &Path) -> Result<DynamicImage> {
     match paths::ext(path).as_str() {
         "svg" => render_svg(path),
         "heic" | "heif" | "avif" => {
+            // sips carries the photo's turn over as exif in the png, so it gets applied below
             let png = Scratch::new("png");
             sips(&["-s", "format", "png"], path, &png.0)?;
-            Ok(image::open(&png.0)?)
+            decode(&png.0, &name)
         }
-        _ => {
-            let reader = ImageReader::open(path)?.with_guessed_format()?;
-            let mut decoder = reader.into_decoder().with_context(|| format!("couldn't read {name}"))?;
-            let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
-            let mut img = DynamicImage::from_decoder(decoder).with_context(|| format!("couldn't read {name}"))?;
-            img.apply_orientation(orientation);
-            Ok(img)
-        }
+        _ => decode(path, &name),
     }
+}
+
+/// Reads an image the way it's shown: a phone photo saved sideways with a "turn me" tag
+/// comes out upright.
+fn decode(path: &Path, name: &str) -> Result<DynamicImage> {
+    let reader = ImageReader::open(path)?.with_guessed_format()?;
+    let mut decoder = reader.into_decoder().with_context(|| format!("couldn't read {name}"))?;
+    let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+    let mut img = DynamicImage::from_decoder(decoder).with_context(|| format!("couldn't read {name}"))?;
+    img.apply_orientation(orientation);
+    Ok(img)
 }
 
 fn render_svg(path: &Path) -> Result<DynamicImage> {
