@@ -61,6 +61,11 @@ pub fn split(input: &Path, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
 
 /// All the pdfs, one after another, in the order they were dropped.
 pub fn merge(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    combine(inputs, &inputs[0], " (merged)", on)
+}
+
+/// Every page of `inputs`, in order, in one pdf named after `name_from`.
+pub(crate) fn combine(inputs: &[PathBuf], name_from: &Path, suffix: &str, on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
     let mut next_id = 1;
     let mut pages: Vec<(ObjectId, Object)> = Vec::new();
     let mut objects: BTreeMap<ObjectId, Object> = BTreeMap::new();
@@ -114,7 +119,7 @@ pub fn merge(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
     merged.renumber_objects();
 
     on(Event::Progress(0.9));
-    let staged = Staged::new(paths::output_for(&inputs[0], "pdf", " (merged)"));
+    let staged = Staged::new(paths::output_for(name_from, "pdf", suffix));
     save(&mut merged, staged.path())?;
     staged.commit()
 }

@@ -190,6 +190,9 @@ pub fn shrink(input: &Path) -> Result<PathBuf> {
 
 /// Every image becomes a page of one pdf, in the order they were dropped.
 pub fn to_pdf(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    if inputs.iter().any(|p| crate::kind_of(p) == crate::Kind::Pdf) {
+        return with_pdfs(inputs, on);
+    }
     let mut pdf = PdfWriter::default();
     for (i, input) in inputs.iter().enumerate() {
         cancel::check()?;
@@ -199,6 +202,27 @@ pub fn to_pdf(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> 
     let staged = Staged::new(paths::output_for(&inputs[0], "pdf", ""));
     fs::write(staged.path(), pdf.finish())?;
     staged.commit()
+}
+
+/// Pictures and pdfs mixed: each picture becomes a page, each pdf keeps its pages, in the
+/// order they were picked.
+fn with_pdfs(inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Result<PathBuf> {
+    let mut pages = Vec::with_capacity(inputs.len());
+    let mut scratch = Vec::new();
+    for input in inputs {
+        cancel::check()?;
+        if crate::kind_of(input) == crate::Kind::Pdf {
+            pages.push(input.clone());
+            continue;
+        }
+        let mut pdf = PdfWriter::default();
+        pdf.add_image(&load(input)?)?;
+        let page = Scratch::new("pdf");
+        fs::write(&page.0, pdf.finish())?;
+        pages.push(page.0.clone());
+        scratch.push(page);
+    }
+    crate::pdf::combine(&pages, &inputs[0], "", on)
 }
 
 pub fn compress(input: &Path, level: Level) -> Result<PathBuf> {

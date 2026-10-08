@@ -113,6 +113,29 @@ fn strips_jpeg_metadata_without_touching_pixels() {
 }
 
 #[test]
+fn pictures_and_pdfs_make_one_pdf() {
+    let dir = TempDir::new("mixed-pdf");
+    let pictures = run("to:pdf", &[photo(&dir.0, "a.png"), photo(&dir.0, "b.png")], &mut quiet()).unwrap().remove(0);
+    let cover = photo(&dir.0, "cover.png");
+    let inputs = [cover, pictures, photo(&dir.0, "back.jpg")];
+
+    assert!(ids(&inputs).contains(&"to:pdf".to_string()));
+    let out = run("to:pdf", &inputs, &mut quiet()).unwrap();
+    assert_eq!(out.len(), 1);
+    assert_eq!(page_count(&out[0]), 4, "the cover, both pages of the pdf, the back");
+    assert_eq!(paths::name(&out[0]), "cover.pdf");
+}
+
+#[test]
+fn files_already_in_the_format_are_left_alone() {
+    let dir = TempDir::new("already");
+    let jpg = photo(&dir.0, "a.jpg");
+    let png = photo(&dir.0, "b.png");
+    let out = run("to:jpg", &[jpg, png], &mut quiet()).unwrap();
+    assert_eq!(out.iter().map(|p| paths::name(p)).collect::<Vec<_>>(), ["b.jpg"]);
+}
+
+#[test]
 fn pdfs_round_trip() {
     let dir = TempDir::new("pdf");
     let a = photo(&dir.0, "a.png");

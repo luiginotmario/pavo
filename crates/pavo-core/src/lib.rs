@@ -265,6 +265,13 @@ pub fn actions_for(inputs: &[PathBuf]) -> Vec<Action> {
         Kind::Archive => add(Group::Tool, "unpack", "unpack"),
         _ => {}
     }
+    // pictures and pdfs picked together: one pdf of all of it
+    if kind == Kind::Other
+        && kinds.iter().all(|k| matches!(k, Kind::Image | Kind::Vector | Kind::Pdf))
+        && kinds.contains(&Kind::Pdf)
+    {
+        add(Group::Convert, "to:pdf", "one pdf");
+    }
 
     if kind != Kind::Archive {
         add(Group::Tool, "zip", if many { "zip them" } else { "zip" });
@@ -308,7 +315,7 @@ pub fn run(action: &str, inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Resul
 
     // actions that turn many inputs into one output
     let combined = match action {
-        "to:pdf" => inputs.iter().all(|p| matches!(kind_of(p), Kind::Image | Kind::Vector)),
+        "to:pdf" => inputs.iter().all(|p| matches!(kind_of(p), Kind::Image | Kind::Vector | Kind::Pdf)),
         "pdf:merge" | "join" => true,
         "zip" | "tar.gz" => total > 1,
         _ => false,
@@ -330,6 +337,10 @@ pub fn run(action: &str, inputs: &[PathBuf], on: &mut dyn FnMut(Event)) -> Resul
     let mut outputs = Vec::with_capacity(total);
     for (index, input) in inputs.iter().enumerate() {
         cancel::check()?;
+        // a jpg picked with a heic for "to jpg" is already done; no copy of it
+        if total > 1 && action.strip_prefix("to:") == Some(canonical_ext(input).as_str()) {
+            continue;
+        }
         on(Event::Start { input, index, total });
         for output in run_one(action, input, on)? {
             on(Event::Output(output.clone()));
