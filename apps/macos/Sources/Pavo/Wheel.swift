@@ -50,6 +50,11 @@ final class Wheel {
     var isOpen: Bool { panel != nil }
     /// The drag pasteboard's change count when we last looked, so each drag is only picked up once.
     private var seenDrag = NSPasteboard(name: .drag).changeCount
+    /// Asking macOS about the drag costs a round trip, so a long drag of a window or a selection
+    /// looks ten times a second at most instead of on every mouse movement.
+    private var lastLook = ContinuousClock.now - .seconds(1)
+    /// This press-and-drag has been looked at (files or not): no more looking until the mouse is up.
+    private var dragKnown = false
 
     /// A file drag that hasn't opened the wheel (yet).
     private struct FileDrag {
@@ -100,11 +105,15 @@ final class Wheel {
         let location = NSEvent.mouseLocation
 
         if fileDrag == nil {
+            guard !dragKnown, .now - lastLook >= .milliseconds(100) else { return }
+            lastLook = .now
             let pasteboard = NSPasteboard(name: .drag)
+            // unchanged: a window or a selection is moving, or the drag hasn't picked anything up yet
             guard pasteboard.changeCount != seenDrag else { return }
-            let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-            guard !urls.isEmpty else { return }
             seenDrag = pasteboard.changeCount
+            dragKnown = true
+            let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+            guard !urls.isEmpty else { return } // text or a picture from a web page
             fileDrag = FileDrag(urls: urls, start: location, location: location, lastMoved: .now)
             watchForPause()
         }
@@ -146,6 +155,7 @@ final class Wheel {
     }
 
     private func released() {
+        dragKnown = false
         fileDrag = nil
         pauseWatch?.cancel()
         pauseWatch = nil
